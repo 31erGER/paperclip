@@ -1,5 +1,27 @@
 # Telemetry Data Contract
 
+## Privacy policy in this fork
+
+External diagnostics are disabled by the immutable
+`EXTERNAL_DIAGNOSTICS_ENABLED = false` policy in `../privacy-policy.ts`.
+Saved `telemetry.enabled: true`, endpoint overrides and environment variables
+cannot enable collection or transport. The resolver returns disabled; direct
+clients also refuse collection, tracking-state creation, fingerprints, timers
+and uploads. Plugin telemetry uses the same client boundary.
+
+The generated upstream event schema was reviewed first and remains unchanged:
+this change disables emission and adds no event names, fields or wire formats.
+No in-repository generator exists for that upstream artifact. Do not hand-edit
+it to describe an emission policy. `privacy.test.ts` exercises the actual policy;
+historical transport tests explicitly mock the gate open only inside tests.
+The complete change requires independent privacy review.
+
+Sentry, OpenTelemetry, agent diagnostic exporters and feedback trace uploads
+have independent enforcement at their owning boundaries. Local run history,
+audit records and plugin metrics remain on the instance. This policy does not
+disable agent web searches, model requests or update checks. See
+`doc/PRIVACY-AUDIT.md` from the repository root for findings and reversal steps.
+
 This document explains how contributors should use Paperclip's public telemetry
 contract. It does not duplicate the full list of individual events or
 dimensions. It documents extra semantic and privacy rules where the generated

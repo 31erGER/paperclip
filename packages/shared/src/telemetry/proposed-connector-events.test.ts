@@ -8,6 +8,10 @@ import {
 } from "./events.js";
 import type { TelemetryState } from "./types.js";
 
+// The registered-event control exercises the retained upstream transport.
+// privacy.test.ts verifies the production gate without a policy mock.
+vi.mock("../privacy-policy.js", () => ({ EXTERNAL_DIAGNOSTICS_ENABLED: true }));
+
 const TEST_STATE: TelemetryState = {
   installId: "test-install",
   salt: "test-salt",
