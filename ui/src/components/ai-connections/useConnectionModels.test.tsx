@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { AiConnectionBinding, AiManagedConnectionSummary } from "@paperclipai/shared";
 import { aiConnectionsApi } from "@/api/ai-connections";
 import { agentsApi } from "@/api/agents";
-import { useConnectionModels } from "./useConnectionModels";
+import { useConnectionModels, useConnectionModelsState } from "./useConnectionModels";
 
 vi.mock("@/api/ai-connections", () => ({ aiConnectionsApi: { list: vi.fn() } }));
 vi.mock("@/api/agents", () => ({ agentsApi: { adapterModels: vi.fn() } }));
@@ -37,12 +37,12 @@ afterEach(async () => {
   vi.resetAllMocks();
 });
 
-async function mount(accounts: AiManagedConnectionSummary[] = [account], harness = "opencode_local", value: AiConnectionBinding | undefined = binding) {
+async function mount(accounts: AiManagedConnectionSummary[] = [account], harness = "opencode_local", value: AiConnectionBinding | undefined = binding, localOnly = false) {
   client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   client.setQueryData(["ai-connections", "company"], { currentUserId: "you", connections: accounts });
   root = createRoot(document.createElement("div"));
   function Probe({ value }: { value: AiConnectionBinding | undefined }) {
-    result = useConnectionModels("company", value, harness);
+    result = useConnectionModelsState("company", value, harness, { localOnly }).connectionModels;
     return null;
   }
   render = async next => { await act(async () => root.render(<QueryClientProvider client={client}><Probe value={next} /></QueryClientProvider>)); };
@@ -82,6 +82,22 @@ it("does not reuse public OpenRouter models after switching to a custom gateway"
 it("leaves native model discovery alone", async () => {
   await mount([], "codex_local", { provider: "openai", method: "subscription", mode: "responsible_user" });
   expect(result).toBeUndefined();
+  expect(agentsApi.adapterModels).not.toHaveBeenCalled();
+});
+
+it("does not request the cloud catalog when local setup restores an OpenRouter binding", async () => {
+  await mount([account], "pi_local", binding, true);
+  expect(result).toBeUndefined();
+  expect(agentsApi.adapterModels).not.toHaveBeenCalled();
+});
+
+it("uses LM Studio model IDs with Pi's custom-provider prefix without a cloud catalog", async () => {
+  const local: AiManagedConnectionSummary = { ...account, provider: "openai", routing: {
+    kind: "local", protocol: "chat", auth: "none", baseUrl: "http://localhost:1234/v1", models: [{ id: "local/model" }],
+  } };
+  await mount([local], "pi_local", { ...binding, provider: "openai" }, true);
+  expect(result?.models).toEqual([{ id: "paperclip/local/model", label: "local/model" }]);
+  expect(result?.resolveModel("other/model")).toBe("paperclip/other/model");
   expect(agentsApi.adapterModels).not.toHaveBeenCalled();
 });
 

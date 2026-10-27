@@ -19,6 +19,40 @@ Storybook's simulated controllers and page annotations do not run in the app.
 
 ## Compatibility and selection
 
+### Local first-company setup with LM Studio
+
+On a self-hosted instance, the first-agent model step offers **Hermes** and **Pi**
+with a **Local model** label. Select either, then **Connect LM Studio**. The form
+defaults to `http://localhost:1234/v1`, Chat Completions, and no authentication.
+Enter the model ID displayed by LM Studio, save the connection, select the model,
+and press **Connect** to test the selected CLI/model before finishing setup.
+An API key is optional when LM Studio server authentication is enabled.
+
+Install the selected agent CLI on the Paperclip host, load a tool-capable model
+in LM Studio, and start its local server. `localhost` refers to the machine where
+the agent executes. This onboarding path explicitly selects the active local
+environment and the existing local CLI adapter, even when the instance default
+is a remote sandbox. Managed-sandbox-only installations do not offer this path.
+Local endpoint URLs retain the existing loopback-only validation.
+
+Hermes and Pi are agent runtimes; LM Studio supplies inference. The connection
+uses the existing company-scoped access controls and disposable provider home.
+Pi receives a generated `models.json`; Hermes receives a generated `config.yaml`.
+Pi's stored model gains a `paperclip/` provider prefix; the model ID sent to
+LM Studio retains any original slashes. No OpenAI/Anthropic account is required,
+and this local setup does not request the OpenRouter model catalog or fall back
+to a cloud inference provider.
+
+This setting controls model inference. Agent tools can still access the network,
+and instance telemetry is configured separately; local inference alone is not
+an instance-wide offline mode.
+
+Protocol references: [LM Studio OpenAI compatibility](https://lmstudio.ai/docs/developer/openai-compat),
+[Pi compatible endpoints](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/models.md),
+and [Hermes providers](https://hermes-agent.nousresearch.com/docs/integrations/providers).
+
+### Provider accounts
+
 The shared `AI_CONNECTION_CAPABILITIES` contract defines these combinations:
 
 | Provider | Sign-in method | Existing harness |

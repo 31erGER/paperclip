@@ -22,6 +22,7 @@ import {
 /** How a source gets authenticated. Every tile is in the same mode at once. */
 export type CredentialMode = "subscription" | "api";
 export type ModelConnectionMode = CredentialMode | "advanced";
+type SourceCredentialMode = ModelConnectionMode | "local";
 
 export type ModelSource = {
   id: string;
@@ -29,13 +30,14 @@ export type ModelSource = {
   /** The brand mark, rendered into a 30px square. */
   icon: ReactNode;
   /** Override the row's credential mode; null leaves the tag slot empty. */
-  credentialMode?: ModelConnectionMode | null;
+  credentialMode?: SourceCredentialMode | null;
 };
 
-const CREDENTIAL_TAG_LABEL: Record<ModelConnectionMode, string> = {
+const CREDENTIAL_TAG_LABEL: Record<SourceCredentialMode, string> = {
   subscription: "Subscription",
   api: "API key",
   advanced: "Custom Gateway",
+  local: "Local model",
 };
 
 /**
@@ -47,7 +49,7 @@ const CREDENTIAL_TAG_LABEL: Record<ModelConnectionMode, string> = {
  * what makes the outgoing label fall out of frame rather than slide past the
  * tile's padding and over the row below.
  */
-export function CredentialTag({ mode }: { mode: ModelConnectionMode }) {
+export function CredentialTag({ mode }: { mode: SourceCredentialMode }) {
   return (
     <span className="relative flex h-4 w-full items-center justify-center overflow-hidden text-(length:--text-micro) text-muted-foreground">
       <AnimatePresence initial={false} mode="sync">
@@ -74,7 +76,7 @@ function ModelSourceTile({
   settling,
 }: {
   source: ModelSource;
-  mode: ModelConnectionMode | null;
+  mode: SourceCredentialMode | null;
   selected: boolean;
   onSelect: () => void;
   buttonRef: (node: HTMLButtonElement | null) => void;

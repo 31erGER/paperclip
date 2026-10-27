@@ -8,19 +8,20 @@ export function useConnectionModelsState(
   companyId: string | null | undefined,
   binding: AiConnectionBinding | undefined,
   harness: string,
+  { localOnly = false }: { localOnly?: boolean } = {},
 ) {
   const accounts = useQuery({
     queryKey: ["ai-connections", companyId],
     queryFn: () => aiConnectionsApi.list(companyId!),
     enabled: Boolean(companyId && binding),
   });
-  const connection = accounts.data?.connections.find((c) =>
+  const connection = accounts.data?.connections.find((c) => (!localOnly || (c.routing?.kind === "local" && c.routing.protocol === "chat")) && (
     binding?.mode === "responsible_user"
       ? c.provider === binding.provider && c.isDefault && c.ownerUserId === accounts.data?.currentUserId && c.ownership === "personal"
-      : c.id === binding?.connectionId && c.grantId === binding?.grantId,
+      : c.id === binding?.connectionId && c.grantId === binding?.grantId),
   );
   const routing = connection?.routing;
-  const openRouter = routing?.kind === "openrouter" || (!routing && binding?.provider === "openrouter");
+  const openRouter = !localOnly && (routing?.kind === "openrouter" || (!routing && binding?.provider === "openrouter"));
   const discover = openRouter && !routing?.models.length;
   // Reuse the existing public catalog and its query cache. It returns OpenCode IDs;
   // strip only that transport prefix for other harnesses (openrouter/auto is

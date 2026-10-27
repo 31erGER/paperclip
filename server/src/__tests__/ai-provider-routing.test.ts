@@ -7,8 +7,32 @@ import {
   isAiConnectionCompatible,
 } from "@paperclipai/shared";
 import { managedProviderRouting } from "../services/ai-provider-routing.js";
+import { piProviderConfiguration } from "../../../packages/paperclip-runner/src/drivers/acpx/pi-provider-config.js";
 
 describe("provider routing", () => {
+  it("routes LM Studio to Pi with an isolated custom provider and preserves upstream model IDs", () => {
+    const routing = aiProviderRoutingSchema.parse({ kind: "local", protocol: "chat", auth: "none", baseUrl: "http://localhost:1234/v1" });
+    expect(isAiConnectionCompatible({ provider: "openai", method: "api_key", routing }, "pi_local", "paperclip/local/model")).toBe(true);
+    expect(isAiConnectionCompatible({ provider: "openai", method: "api_key", mode: "delegated", connectionId: "local", grantId: "grant" }, "pi_local", "paperclip/local/model")).toBe(true);
+    expect(aiRoutingModel(routing, "pi_local", "local/model")).toBe("paperclip/local/model");
+    expect(aiRoutingModel(routing, "pi_local", "paperclip/local/model")).toBe("paperclip/local/model");
+    const projected = managedProviderRouting(routing, "pi_local", "", "paperclip/local/model");
+    expect(projected.config.model).toBe("paperclip/local/model");
+    expect(JSON.parse(projected.piModels)).toEqual({ providers: { paperclip: {
+      baseUrl: "http://localhost:1234/v1", api: "openai-completions", apiKey: "local-no-auth",
+      models: [{ id: "local/model" }],
+    } } });
+    expect(projected.env).not.toHaveProperty("OPENROUTER_API_KEY");
+    expect(projected.env).not.toHaveProperty("OPENAI_API_KEY");
+  });
+  it("keeps authenticated Pi gateway credentials outside generated model configuration", () => {
+    const routing = aiProviderRoutingSchema.parse({ kind: "gateway", protocol: "chat", baseUrl: "https://gateway.example/v1" });
+    const projected = managedProviderRouting(routing, "pi_local", "selected-key", "model");
+    expect(projected.env.OPENAI_API_KEY).toBe("selected-key");
+    expect(projected.piModels).not.toContain("selected-key");
+    expect(JSON.parse(projected.piModels).providers.paperclip.apiKey).toBe("OPENAI_API_KEY");
+    expect(piProviderConfiguration(projected.env)?.credentialNames).toContain("OPENAI_API_KEY");
+  });
   it("routes managed OpenRouter accounts to direct and native Pi without OpenCode configuration", () => {
     const routing = aiProviderRoutingSchema.parse({ kind: "openrouter", protocol: "chat" });
     expect(aiRoutingHarness("paperclip_runner", "acpx", "pi")).toBe("pi_local");
@@ -20,7 +44,7 @@ describe("provider routing", () => {
     const projected = managedProviderRouting(routing, "pi_local", "selected-pi-key", "anthropic/model");
     expect(projected).toMatchObject({ config: { model: "openrouter/anthropic/model" }, env: { OPENROUTER_API_KEY: "selected-pi-key" } });
     expect(projected.env).not.toHaveProperty("OPENCODE_CONFIG_CONTENT");
-    expect(isAiConnectionCompatible({ provider: "openai", method: "api_key", routing: aiProviderRoutingSchema.parse({ kind: "gateway", protocol: "chat", baseUrl: "https://gateway.example/v1" }) }, "pi_local", "custom/model")).toBe(false);
+    expect(isAiConnectionCompatible({ provider: "openai", method: "api_key", routing: aiProviderRoutingSchema.parse({ kind: "gateway", protocol: "chat", baseUrl: "https://gateway.example/v1" }) }, "pi_local", "custom/model")).toBe(true);
   });
   it.each(["openai", "anthropic", "google", "openrouter"] as const)("accepts Pi %s API keys only for matching models", provider => {
     expect(isAiConnectionCompatible({ provider, method: "api_key" }, "paperclip_runner", `${provider}/model`, "acpx", "pi")).toBe(true);

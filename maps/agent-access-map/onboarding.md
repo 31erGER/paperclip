@@ -74,6 +74,12 @@ a company key.
 
 Capability ID: `onboarding/adapter`.
 
+Local first-company setup (2026-10-27) reuses the existing agent and AI-connection
+APIs for Hermes/Pi with LM Studio. Company, human-audience and agent-access checks
+remain in the existing services. The UI pins local execution and requires a
+saved local Chat Completions connection and a model before testing/hiring.
+Component and routing regressions do not establish live model execution evidence.
+
 Review: `baseline`.
 
 API: `present` — representative operation IDs:

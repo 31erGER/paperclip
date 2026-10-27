@@ -33,6 +33,23 @@ it("reconnects an older OpenRouter account without adding routing metadata", asy
 });
 
 const providerSources = ["openrouter", "bedrock", "responses-api", "messages-api", "chat-completions-api", "local"];
+it("saves LM Studio with a loopback endpoint and no API key", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+  client.setQueryData(["ai-connections", "company", undefined], { canManageConnections: true, connections: [] });
+  client.setQueryData(["agents", "company", "provider-access"], []);
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<QueryClientProvider client={client}><TooltipProvider><AiProviderSetup companyId="company" initialProvider="local" initialProtocol="chat" providerLabel="LM Studio" onCancel={() => {}} onComplete={() => {}} /></TooltipProvider></QueryClientProvider>));
+    expect((container.querySelector('[aria-label="Provider URL"]') as HTMLInputElement).value).toBe("http://localhost:1234/v1");
+    expect(container.querySelector('input[aria-label="API key"]')).toBeNull();
+    await act(async () => container.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    expect(aiConnectionsApi.create).toHaveBeenCalledWith("company", expect.objectContaining({
+      provider: "openai", method: "api_key", routing: expect.objectContaining({ kind: "local", protocol: "chat", auth: "none", baseUrl: "http://localhost:1234/v1" }),
+    }));
+    expect(vi.mocked(aiConnectionsApi.create).mock.lastCall?.[1]).not.toHaveProperty("apiKey");
+  } finally { await act(async () => root.unmount()); client.clear(); }
+});
 it("shows advanced providers directly when entered from advanced connection mode", async () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   client.setQueryData(["ai-connections", "company", undefined], { canManageConnections: true, connections: [] });
@@ -61,16 +78,16 @@ it.each(providerSources)("opens %s directly with shared access folded under Adva
   try {
     await act(async () => root.render(<QueryClientProvider client={client}><TooltipProvider><AiProviderSetup companyId="company" initialProvider={preset.provider} initialProtocol={preset.protocol} providerLabel={preset.label} onCancel={onCancel} onComplete={() => {}} /></TooltipProvider></QueryClientProvider>));
     expect(container.textContent).not.toContain("Connect a model provider");
-    expect(container.textContent).toContain("Connects for everyone in your organization, available to all agents.");
+    expect(container.textContent).toContain(source === "local" ? "No sign-in needed, available to all agents." : "Connects for everyone in your organization, available to all agents.");
     expect(container.querySelector('[role="radio"]')).toBeNull();
     const change = Array.from(container.querySelectorAll('button')).find(b => b.textContent === "Change")!;
     expect(change.getAttribute("aria-expanded")).toBe("false");
     await act(async () => change.click());
     const radio = (text: string) => Array.from(container.querySelectorAll('[role="radio"]')).find(b => b.textContent?.includes(text)) as HTMLButtonElement;
-    expect(radio("Any human in the organization").getAttribute("aria-checked")).toBe("true");
+    if (source !== "local") expect(radio("Any human in the organization").getAttribute("aria-checked")).toBe("true");
     expect(radio("Any agent").getAttribute("aria-checked")).toBe("true");
-    await act(async () => radio("Just me").click());
-    expect(container.textContent).toContain("Connects as you, available to all agents.");
+    if (source !== "local") await act(async () => radio("Just me").click());
+    expect(container.textContent).toContain(source === "local" ? "No sign-in needed, available to all agents." : "Connects as you, available to all agents.");
     await act(async () => Array.from(container.querySelectorAll('button')).find(b => b.textContent === "Back")!.click());
     expect(onCancel).toHaveBeenCalledOnce();
   } finally {

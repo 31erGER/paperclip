@@ -16,6 +16,7 @@ export function managedProviderRouting(
   const config: Record<string, unknown> = {};
   let codexConfig = "";
   let hermesConfig = "";
+  let piModels = "";
   const baseUrl = aiRoutingBaseUrl(route, harness);
   const openrouter = isOpenRouterUrl(baseUrl);
   if (route.kind === "bedrock") {
@@ -44,6 +45,19 @@ export function managedProviderRouting(
     }
   } else if (harness === "pi_local" && route.kind === "openrouter") {
     env.OPENROUTER_API_KEY = credential;
+    config.model = aiRoutingModel(route, harness, model);
+  } else if (harness === "pi_local") {
+    const id = model.replace(/^paperclip\//, "");
+    if (route.auth !== "none") env.OPENAI_API_KEY = credential;
+    const providers = { paperclip: {
+      baseUrl, api: "openai-completions",
+      apiKey: route.auth === "none" ? "local-no-auth" : "OPENAI_API_KEY",
+      models: id ? [{ id }] : [],
+    } };
+    piModels = JSON.stringify({ providers });
+    // The Pi adapter also materializes this configuration when shipping runtime
+    // assets to another execution environment.
+    env.PAPERCLIP_PI_PROVIDERS = JSON.stringify(providers);
     config.model = aiRoutingModel(route, harness, model);
   } else if (harness === "opencode_local") {
     const provider = route.kind === "openrouter" ? "openrouter" : "paperclip";
@@ -80,5 +94,5 @@ export function managedProviderRouting(
     hermesConfig = `model:\n  provider: ${route.kind === "openrouter" ? '"openrouter"' : '"custom"'}\n  default: ${JSON.stringify(model)}\n  base_url: ${JSON.stringify(baseUrl)}\n  api_mode: "chat_completions"\n${route.auth === "none" ? "" : '  api_key: "${OPENAI_API_KEY}"\n'}`;
   }
   if (openrouter && hermesConfig) hermesConfig += `  default_headers: ${JSON.stringify(OPENROUTER_ATTRIBUTION_HEADERS)}\n`;
-  return { env, config, codexConfig, hermesConfig };
+  return { env, config, codexConfig, hermesConfig, piModels };
 }
