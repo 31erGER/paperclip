@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parse } from "smol-toml";
 import { DEFAULT_AGENT_OBSERVABILITY_CAPTURE } from "@paperclipai/shared";
-import { buildProviderObservabilityLaunch, applyObservabilityEnvironment, observabilitySecretValues } from "./agent-observability.js";
+import { buildProviderObservabilityLaunch, applyObservabilityEnvironment, encodeObservabilityHeaders, observabilitySecretValues } from "./agent-observability.js";
 import { prepareCodexObservabilityProfile, replaceCodexProfileArgs, selectedCodexProfile, disableCodexObservabilityArgs } from "./codex-observability-profile.js";
 import { buildInvocationEnvForLogs } from "./server-utils.js";
 import { prepareAcpxCodexObservabilityHome } from "./codex-observability-home.js";
@@ -12,20 +12,38 @@ const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const input = { companyId: "company", agentId: "agent", revision: "revision", compatibilityKey: "version", enabled: true,
   capture: { ...DEFAULT_AGENT_OBSERVABILITY_CAPTURE }, logsEndpoint: "https://collector.example/v1/logs", tracesEndpoint: "https://collector.example/v1/traces", headers: { authorization: "Bearer a,b=c% d" } };
+it.each(["claude", "codex"] as const)("prevents %s exporter material even when requested explicitly", kind => {
+  const launch = buildProviderObservabilityLaunch({ ...input, kind });
+  const serialized = JSON.stringify(launch);
+  expect(serialized).not.toContain("collector.example");
+  expect(serialized).not.toContain(encodeURIComponent(input.headers.authorization));
+  expect(launch.environment).toMatchObject({ OTEL_SDK_DISABLED: "true", OTEL_TRACES_EXPORTER: "none", OTEL_LOGS_EXPORTER: "none" });
+  if (kind === "codex") expect(launch.otelConfig).toMatchObject({ exporter: "none", trace_exporter: "none", metrics_exporter: "none" });
+});
 it("encodes headers losslessly and clears ambient exporter conflicts without changing host state", () => {
-  const launch = buildProviderObservabilityLaunch({ ...input, kind: "claude" });
+  const launch = { kind: "claude" as const, compatibilityKey: "legacy", environment: {
+    OTEL_EXPORTER_OTLP_LOGS_HEADERS: encodeObservabilityHeaders(input.headers),
+    OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: input.logsEndpoint,
+    CLAUDE_CODE_ENABLE_TELEMETRY: "1",
+  } };
   const env = { OTEL_EXPORTER_OTLP_HEADERS: "ambient", OTEL_EXPORTER_OTLP_ENDPOINT: "https://wrong", KEEP: "ok" };
   applyObservabilityEnvironment(env, launch);
   expect(env).not.toHaveProperty("OTEL_EXPORTER_OTLP_HEADERS");
+  expect(env).not.toHaveProperty("OTEL_EXPORTER_OTLP_LOGS_HEADERS");
+  expect(env).not.toHaveProperty("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT");
+  expect(env).toHaveProperty("CLAUDE_CODE_ENABLE_TELEMETRY", "0");
   expect(env).toHaveProperty("KEEP", "ok");
   const encoded = launch.environment.OTEL_EXPORTER_OTLP_LOGS_HEADERS;
   expect(decodeURIComponent(encoded.slice(encoded.indexOf("=") + 1))).toBe(input.headers.authorization);
   expect(observabilitySecretValues(launch)).toContain(input.headers.authorization);
   expect(JSON.stringify(buildInvocationEnvForLogs({ ...launch.environment }))).not.toContain("a%2Cb");
 });
-it("keeps Codex headers in the launch environment and preserves literal percent sequences", () => {
+it("redacts legacy Codex launch headers and preserves literal percent sequences", () => {
   const original = "Bearer a,b=%26 c%";
-  const launch = buildProviderObservabilityLaunch({ ...input, kind: "codex", headers: { authorization: original } });
+  const launch = { kind: "codex" as const, compatibilityKey: "legacy", environment: {
+    OTEL_EXPORTER_OTLP_LOGS_HEADERS: encodeObservabilityHeaders({ authorization: original }),
+    OTEL_EXPORTER_OTLP_TRACES_HEADERS: encodeObservabilityHeaders({ authorization: original }),
+  }, otelConfig: { exporter: { "otlp-http": { headers: {} } } } };
   const exporter = launch.otelConfig!.exporter as { "otlp-http": { headers: Record<string, string> } };
   expect(exporter["otlp-http"].headers).toEqual({});
   for (const key of ["OTEL_EXPORTER_OTLP_LOGS_HEADERS", "OTEL_EXPORTER_OTLP_TRACES_HEADERS"]) {
@@ -65,7 +83,7 @@ it("creates invocation-owned profiles, preserves selected profile settings, and 
   expect(JSON.stringify(parsed)).not.toContain(input.headers.authorization);
   expect(JSON.stringify(parsed)).not.toContain(encodeURIComponent(input.headers.authorization));
   expect(parsed.model).toBe("chosen-model");
-  expect(parsed.otel).toMatchObject({ log_agent_responses: true, tool_result: { max_bytes: 65536 } });
+  expect(parsed.otel).toMatchObject({ exporter: "none", log_agent_responses: false, tool_result: { max_bytes: 0 } });
   expect((await stat(join(root, a.filename))).mode & 0o777).toBe(0o600);
   const args = ["exec", "--profile=review", "resume", "session", "-"];
   replaceCodexProfileArgs(args, a.name);
@@ -86,11 +104,11 @@ it("isolates overlapping ACPX export settings while sharing the saved provider c
     prepareAcpxCodexObservabilityHome(home, otherAgent, "other-agent"),
   ]);
   expect(a).not.toBe(c);
-  expect(parse(await readFile(join(a, "config.toml"), "utf8")).otel).toMatchObject({ span_attributes: { "paperclip.agent.id": input.agentId } });
-  expect(parse(await readFile(join(c, "config.toml"), "utf8")).otel).toMatchObject({ span_attributes: { "paperclip.agent.id": "other-agent" } });
+  expect(parse(await readFile(join(a, "config.toml"), "utf8")).otel).toMatchObject({ exporter: "none", span_attributes: {} });
+  expect(parse(await readFile(join(c, "config.toml"), "utf8")).otel).toMatchObject({ exporter: "none", span_attributes: {} });
   await writeFile(join(a, "sessions", "saved-conversation.jsonl"), "conversation checkpoint");
   expect(await readFile(join(b, "sessions", "saved-conversation.jsonl"), "utf8")).toBe("conversation checkpoint");
-  expect(parse(await readFile(join(a, "config.toml"), "utf8")).otel).toMatchObject({ log_agent_responses: true });
+  expect(parse(await readFile(join(a, "config.toml"), "utf8")).otel).toMatchObject({ log_agent_responses: false });
   expect(parse(await readFile(join(b, "config.toml"), "utf8")).otel).toMatchObject({ exporter: "none" });
   expect(parse(await readFile(join(a, "config.toml"), "utf8")).model).toBe("retained-model");
   expect(await readFile(join(home, "config.toml"), "utf8")).toBe('model = "retained-model"\n');

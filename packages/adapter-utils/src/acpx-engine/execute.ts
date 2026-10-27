@@ -2,6 +2,7 @@ import { isOpenRouterUrl, openRouterClaudeHeaders } from "@paperclipai/shared/op
 import { prepareAcpxCodexObservabilityHome } from "../codex-observability-home.js";
 import { codexShellEnvironmentKeys } from "../codex-shell-environment.js";
 import { applyObservabilityEnvironment } from "../agent-observability.js";
+import { applyChildRuntimePrivacyEnv } from "../diagnostic-env.js";
 import { cancellableSandboxStartup } from "./startup-cancellation.js";
 import { emitStartupReuse, environmentStartupReuse, summarizeStartupReuse, type StartupReuseReason } from "../startup-reuse.js";
 import { withAdapterExecutionPhase, type AdapterExecutionPhase } from "../execution-phase.js";
@@ -711,7 +712,7 @@ export function finalizeLaunchEnvironment(
     Object.assign(baseEnv, contribution.env);
   }
   const env = Object.freeze(
-    resolveRuntimeEnv(baseEnv, options.acpxAgent, options),
+    applyChildRuntimePrivacyEnv(resolveRuntimeEnv(baseEnv, options.acpxAgent, options)),
   );
   return { env } as unknown as LaunchEnvironment;
 }
