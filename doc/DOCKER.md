@@ -63,6 +63,10 @@ and before copying the entrypoint. It restores canonical LF text for Runner
 inputs, patch files and the entrypoint; binary fixtures are preserved. It does
 not regenerate protocol contracts or bypass integrity checks. `.gitattributes`
 also requests LF for these paths on future checkouts.
+The helper also restores committed `0644` modes on the two Pi distribution
+manifests: Docker Desktop's Windows `COPY` otherwise makes them executable,
+which changes Pi's qualified runtime closure. Third-party payloads and trusted
+closure digests are not modified.
 
 ```sh
 docker build --target production -t paperclip-local .

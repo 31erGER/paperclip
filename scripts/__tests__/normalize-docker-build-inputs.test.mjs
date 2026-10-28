@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -35,5 +35,24 @@ test("Windows build inputs acquire canonical LF bytes while binary and unrelated
     const rerun = spawnSync(process.execPath, [helper, root], { encoding: "utf8" });
     assert.equal(rerun.status, 0, rerun.stderr);
     assert.equal(readFileSync(manifest, "utf8"), '{\n  "sha256": "keep-this-attestation"\n}\n');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("Pi lock inputs keep their committed non-executable modes in a Linux image", { skip: process.platform === "win32" }, () => {
+  const root = mkdtempSync(join(tmpdir(), "paperclip-docker-modes-"));
+  try {
+    const directory = join(root, "packages/paperclip-runner/scripts/pi-distribution");
+    mkdirSync(directory, { recursive: true });
+    for (const name of ["package.json", "package-lock.json", "unrelated.sh"]) {
+      writeFileSync(join(directory, name), "{}\n");
+      chmodSync(join(directory, name), 0o755);
+    }
+    const result = spawnSync(process.execPath, [helper, root], { encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    for (const name of ["package.json", "package-lock.json"]) {
+      assert.equal(statSync(join(directory, name)).mode & 0o777, 0o644);
+      assert.equal(readFileSync(join(directory, name), "utf8"), "{}\n");
+    }
+    assert.equal(statSync(join(directory, "unrelated.sh")).mode & 0o777, 0o755);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
