@@ -53,15 +53,15 @@ Files: `ui/src/components/OnboardingWizard.tsx`, `ui/src/components/onboarding/C
 - [x] Make a displayed method switch effective for providers supporting both methods. Hide unsupported switching on a committed token-only Copilot selection.
 - [x] Preserve explicit newer user choices if delayed setup restoration reproduces the race.
 - [x] Correct a source-visibility condition only if Task1 proves it wrong; retain the real self-hosted/cloud policy distinction. Current visibility is correct; no speculative filter change.
-- [ ] Run the relevant wizard/provider-connection suites, UI typecheck and token gates; commit/push a coherent fix.
+- [x] Run the relevant wizard/provider-connection suites, UI typecheck and token gates; commit/push a coherent fix. Commit `037e05124`; 267 targeted cases pass, UI typecheck/build pass, 106 existing token violations remain.
 
 ## Task3: Prove and repair Docker prerequisites
 
 Files: `Dockerfile`, `doc/DOCKER.md`, `doc/connections/AI-CONNECTIONS.md`, narrow packaging tests/helper if needed.
 
-- [ ] Verify the official pinned Pi package already used by this repo and the official Hermes distribution/install contract.
-- [ ] Add the missing local CLI distributions to the image's build-time tool layer, preserving updates and privacy gates; use an isolated environment for Python dependencies.
-- [ ] Verify CLI entrypoints/versions as the runtime user in an isolated container. Check the local inference URL instructions for Docker Desktop and Linux host reachability.
+- [x] Verify the official pinned Pi package already used by this repo and the official Hermes distribution/install contract.
+- [x] Add the missing local CLI distributions to the image's build-time tool layer, preserving updates and privacy gates; use an isolated environment for Python dependencies.
+- [x] Verify CLI entrypoints/versions as the runtime user in an isolated container. Check the local inference URL instructions for Docker Desktop and Linux host reachability. Both CLIs exit successfully as `node` with networking disabled in the tool-stage image; final production verification is still pending.
 - [ ] Document exact build/ref and persistence instructions so a rebuilt fork image is distinguishable from an original/old image. Commit/push after verification.
 
 ## Task4: Integrated verification and review
@@ -69,7 +69,7 @@ Files: `Dockerfile`, `doc/DOCKER.md`, `doc/connections/AI-CONNECTIONS.md`, narro
 - [ ] Exercise the built UI journey with representative authenticated/private fixture APIs, or the isolated source container if the full build is available. Record whether APIs/providers are real or simulated.
 - [ ] Run `pnpm check:privacy`, relevant typechecks/build, and map validation after updating affected map entries.
 - [ ] Attempt the required full checks; preserve existing Runner checksum, Windows shell/runner and token-gate failures. Do not weaken checks to hide them.
-- [ ] Obtain one independent final review; repair actionable findings with red/green evidence.
+- [x] Obtain one independent final review; repair actionable findings with red/green evidence. Independent read-only review found no actionable issue; production-image acceptance remains a separate required check.
 - [ ] Update this plan's results, commit/push and verify clean status plus remote HEAD.
 
 ## Execution record
@@ -81,3 +81,6 @@ Files: `Dockerfile`, `doc/DOCKER.md`, `doc/connections/AI-CONNECTIONS.md`, narro
 - Ruling: extend Docker repair to the exact `host.docker.internal` endpoint alias — the shared local-route validator currently rejects the address needed to reach host LM Studio from bridge-networked Docker. Arbitrary LAN/public hosts and lookalike domains remain rejected.
 - Ruling: explicitly turn Hermes shared metrics off in generated managed profiles — the verified pinned Hermes distribution supports this config, and the existing privacy policy requires both collection/upload disabled.
 - Docker build uses its own BuildKit container (8GB RAM / 10GB RAM+swap, two concurrent build steps) to protect unrelated running containers. A sample during concurrent application build and CLI-image export reached 7.8GB; this is not an isolated steady-state Paperclip measurement.
+- Baseline full Docker build failed at the unchanged Runner protocol manifest check because Windows CRLF bytes differed from committed LF bytes. Verified normalized input hashes against Git blobs; added narrowly scoped normalization, preserving binary/BOM content and all integrity checks. Node regression passed after an observed BOM preservation failure was repaired.
+- Repaired full build passed native Rust, UI, server and runtime-bundle stages. Image export/runtime acceptance is pending. Compose now selects `production` explicitly instead of Dockerfile's final optional `cloud` stage.
+- Shared/UI typechecks and map validation pass. Privacy verification: 20 files / 98 tests pass. No real LM Studio model or subscription authentication has been exercised.

@@ -4,6 +4,12 @@
 .pnpm-store
 node_modules
 **/node_modules
+.superpowers
+.env
+.env.*
+**/.env
+**/.env.*
+!**/.env.example
 coverage
 data
 tmp

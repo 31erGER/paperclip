@@ -1,4 +1,5 @@
 import { OPENROUTER_ATTRIBUTION_HEADERS, isOpenRouterUrl, openRouterClaudeHeaders, openRouterCodexHeaders } from "@paperclipai/shared/openrouter-attribution";
+import { EXTERNAL_DIAGNOSTICS_ENABLED } from "@paperclipai/shared/privacy-policy";
 import {
   aiRoutingBaseUrl,
   aiRoutingModel,
@@ -94,5 +95,8 @@ export function managedProviderRouting(
     hermesConfig = `model:\n  provider: ${route.kind === "openrouter" ? '"openrouter"' : '"custom"'}\n  default: ${JSON.stringify(model)}\n  base_url: ${JSON.stringify(baseUrl)}\n  api_mode: "chat_completions"\n${route.auth === "none" ? "" : '  api_key: "${OPENAI_API_KEY}"\n'}`;
   }
   if (openrouter && hermesConfig) hermesConfig += `  default_headers: ${JSON.stringify(OPENROUTER_ATTRIBUTION_HEADERS)}\n`;
+  if (hermesConfig && !EXTERNAL_DIAGNOSTICS_ENABLED) {
+    hermesConfig += "telemetry:\n  shared_metrics:\n    enabled: false\n    send: false\n";
+  }
   return { env, config, codexConfig, hermesConfig, piModels };
 }

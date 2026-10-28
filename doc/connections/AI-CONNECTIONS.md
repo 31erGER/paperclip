@@ -33,7 +33,11 @@ in LM Studio, and start its local server. `localhost` refers to the machine wher
 the agent executes. This onboarding path explicitly selects the active local
 environment and the existing local CLI adapter, even when the instance default
 is a remote sandbox. Managed-sandbox-only installations do not offer this path.
-Local endpoint URLs retain the existing loopback-only validation.
+Local endpoint URLs accept loopback addresses and the exact Docker host alias
+`host.docker.internal`. Use `http://host.docker.internal:1234/v1` when Paperclip
+runs in Docker and LM Studio runs on its host. Arbitrary LAN/public hosts and
+lookalike domain suffixes remain rejected; local routing never falls back to a
+cloud provider. See [Docker setup](../DOCKER.md#31erger-fork-local-agent-onboarding).
 
 Hermes and Pi are agent runtimes; LM Studio supplies inference. The connection
 uses the existing company-scoped access controls and disposable provider home.

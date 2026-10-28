@@ -78,6 +78,9 @@ Local first-company setup (2026-10-27) reuses the existing agent and AI-connecti
 APIs for Hermes/Pi with LM Studio. Company, human-audience and agent-access checks
 remain in the existing services. The UI pins local execution and requires a
 saved local Chat Completions connection and a model before testing/hiring.
+Local routing also permits the exact `host.docker.internal` alias so Docker can
+reach host LM Studio; arbitrary remote hosts and lookalike aliases remain
+rejected. This changes the endpoint policy, not company or actor permissions.
 Component and routing regressions do not establish live model execution evidence.
 
 Review: `baseline`.

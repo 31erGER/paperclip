@@ -25,6 +25,7 @@ export function OnboardingLocalSetup({ companyId, agentId, environmentId, value,
     <p className="text-sm text-muted-foreground">
       Run LM Studio on the Paperclip host, load a model that supports tool use, and start its local server.
       Install the selected agent CLI on the same host. No cloud account is required.
+      {" "}In Docker, use http://host.docker.internal:1234/v1 for LM Studio on your PC; localhost refers to the container.
     </p>
     {accounts.isError && <p role="alert" className="text-sm text-destructive">
       Could not load local connections. <Button type="button" variant="ghost" onClick={() => void accounts.refetch()}>Retry</Button>

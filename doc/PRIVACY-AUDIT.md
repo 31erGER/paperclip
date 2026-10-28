@@ -72,10 +72,18 @@ it also disables the updater.
 - Local logs and locally generated diagnostic bundles. Operators can inspect
   files before deliberately sharing them outside Paperclip.
 
+Managed Hermes connection profiles now explicitly set
+`telemetry.shared_metrics.enabled: false` and `send: false`. This configuration
+was verified against the pinned official Hermes v0.22.5 source used by the fork
+image, and is enforced by `server/src/services/ai-provider-routing.ts` while the
+central diagnostics flag is false. The local Docker routing alias is exact;
+arbitrary remote hosts remain rejected. The image build excludes `.env` files
+and `.superpowers` scratch artifacts from its context.
+
 Hermes/Pi and installed plugins are separate executable code. Known opt-outs and
 removing inherited exporter activation do not prove every third-party program
-telemetry-free. In particular, a Hermes-specific opt-out must be verified against
-the installed Hermes version rather than invented. Untrusted plugins can still
+telemetry-free. Independently installed Hermes versions still need their own
+configuration/version review. Untrusted plugins can still
 make Internet requests; blocking all such requests would also block the searches
 and tools the user explicitly wants to keep.
 

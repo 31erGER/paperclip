@@ -10,6 +10,22 @@ import { managedProviderRouting } from "../services/ai-provider-routing.js";
 import { piProviderConfiguration } from "../../../packages/paperclip-runner/src/drivers/acpx/pi-provider-config.js";
 
 describe("provider routing", () => {
+  it("reaches host LM Studio through the explicit Docker host alias without cloud routing", () => {
+    const route = aiProviderRoutingSchema.parse({ kind: "local", protocol: "chat", auth: "none", baseUrl: "http://host.docker.internal:1234/v1" });
+    for (const harness of ["hermes_local", "pi_local"]) {
+      const projected = managedProviderRouting(route, harness, "", "local/model");
+      expect(JSON.stringify(projected)).toContain("http://host.docker.internal:1234/v1");
+      expect(JSON.stringify(projected)).not.toContain("openrouter.ai");
+    }
+  });
+  it.each(["http://host.docker.internal.evil.example/v1", "http://192.168.1.10:1234/v1", "https://example.com/v1"])("does not broaden local routing to arbitrary remote hosts: %s", baseUrl => {
+    expect(aiProviderRoutingSchema.safeParse({ kind: "local", protocol: "chat", auth: "none", baseUrl }).success).toBe(false);
+  });
+  it("explicitly disables Hermes shared metric collection and uploads in the isolated profile", () => {
+    const route = aiProviderRoutingSchema.parse({ kind: "local", protocol: "chat", auth: "none", baseUrl: "http://localhost:1234/v1" });
+    const projected = managedProviderRouting(route, "hermes_local", "", "model");
+    expect(projected.hermesConfig).toContain("telemetry:\n  shared_metrics:\n    enabled: false\n    send: false\n");
+  });
   it("routes LM Studio to Pi with an isolated custom provider and preserves upstream model IDs", () => {
     const routing = aiProviderRoutingSchema.parse({ kind: "local", protocol: "chat", auth: "none", baseUrl: "http://localhost:1234/v1" });
     expect(isAiConnectionCompatible({ provider: "openai", method: "api_key", routing }, "pi_local", "paperclip/local/model")).toBe(true);

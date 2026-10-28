@@ -12,6 +12,33 @@ RUN usermod -u $USER_UID --non-unique node \
   && groupmod -g $USER_GID --non-unique node \
   && usermod -g $USER_GID -d /paperclip node
 
+FROM base AS normalized-inputs
+WORKDIR /app
+COPY packages/paperclip-runner packages/paperclip-runner
+COPY patches patches
+COPY scripts/docker-entrypoint.sh scripts/normalize-docker-build-inputs.mjs scripts/
+COPY scripts/__tests__/normalize-docker-build-inputs.test.mjs scripts/__tests__/
+RUN node --test scripts/__tests__/normalize-docker-build-inputs.test.mjs \
+  && node scripts/normalize-docker-build-inputs.mjs
+
+# Local onboarding must have real CLI entrypoints in the image. Keep their
+# installation outside the data volume and pin the distributions independently
+# of the Node/server build so UI edits can reuse this layer.
+FROM base AS local-agents
+COPY --from=ghcr.io/astral-sh/uv:0.13.6 /uv /usr/local/bin/uv
+ARG HERMES_AGENT_COMMIT=bf0203a794a07aac3ff764972ab9087baa4e4f4e
+ARG PI_CODING_AGENT_VERSION=0.74.0
+ENV UV_PYTHON_INSTALL_DIR=/opt/agent-python \
+    UV_PYTHON_PREFERENCE=only-managed
+RUN git init /opt/hermes-agent \
+  && git -C /opt/hermes-agent remote add origin https://github.com/NousResearch/hermes-agent.git \
+  && git -C /opt/hermes-agent fetch --depth 1 origin "$HERMES_AGENT_COMMIT" \
+  && git -C /opt/hermes-agent checkout --detach FETCH_HEAD \
+  && uv sync --project /opt/hermes-agent --frozen --no-dev --python 3.14 \
+  && npm install --global --prefix /opt/pi-agent --omit=dev --ignore-scripts "@earendil-works/pi-coding-agent@${PI_CODING_AGENT_VERSION}" \
+  && /opt/hermes-agent/.venv/bin/hermes --version \
+  && /opt/pi-agent/bin/pi --version
+
 FROM base AS deps
 WORKDIR /app
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
@@ -25,7 +52,7 @@ COPY packages/google-sheets-mcp-server/package.json packages/google-sheets-mcp-s
 COPY packages/kv-demo-mcp-server/package.json packages/kv-demo-mcp-server/
 COPY packages/mcp-server/package.json packages/mcp-server/
 COPY packages/paperclip-eval-kernel/package.json packages/paperclip-eval-kernel/
-COPY packages/paperclip-runner/package.json packages/paperclip-runner/
+COPY --from=normalized-inputs /app/packages/paperclip-runner/package.json packages/paperclip-runner/
 COPY packages/skills-catalog/package.json packages/skills-catalog/
 COPY packages/tailscale-https-broker/package.json packages/tailscale-https-broker/
 COPY packages/teams-catalog/package.json packages/teams-catalog/
@@ -46,7 +73,7 @@ COPY --parents packages/plugins/sandbox-providers/./*/package.json packages/plug
 COPY packages/plugins/paperclip-plugin-fake-sandbox/package.json packages/plugins/paperclip-plugin-fake-sandbox/
 COPY packages/plugins/plugin-llm-wiki/package.json packages/plugins/plugin-llm-wiki/
 COPY packages/plugins/plugin-workspace-diff/package.json packages/plugins/plugin-workspace-diff/
-COPY patches/ patches/
+COPY --from=normalized-inputs /app/patches/ patches/
 COPY scripts/link-plugin-dev-sdk.mjs scripts/
 COPY packages/paperclip-runner/scripts/install-copilot-assets.mjs packages/paperclip-runner/scripts/materialize-copilot-binary.mjs packages/paperclip-runner/scripts/copilot-inner-distribution.mjs packages/paperclip-runner/scripts/
 COPY packages/paperclip-runner/src/drivers/acpx/copilot-installation.ts packages/paperclip-runner/src/drivers/acpx/
@@ -91,7 +118,7 @@ RUN set -eux; \
     rm /tmp/rustup-init
 # Install the package-owned compiler before any application source enters the
 # stage. rustup-init above installs rustup itself, not the selected compiler.
-COPY packages/paperclip-runner/rust-toolchain.toml /tmp/runner-toolchain/rust-toolchain.toml
+COPY --from=normalized-inputs /app/packages/paperclip-runner/rust-toolchain.toml /tmp/runner-toolchain/rust-toolchain.toml
 RUN cd /tmp/runner-toolchain && rustup show
 
 # Pin the recipe generator and its dependency lockfile. It is a build-only tool
@@ -101,13 +128,13 @@ RUN cd /tmp/runner-toolchain && cargo install cargo-chef --version 0.1.73 --lock
 
 FROM rust-chef AS runner-plan
 WORKDIR /app/packages/paperclip-runner
-COPY packages/paperclip-runner/rust-toolchain.toml ./
-COPY packages/paperclip-runner/runner ./runner
+COPY --from=normalized-inputs /app/packages/paperclip-runner/rust-toolchain.toml ./
+COPY --from=normalized-inputs /app/packages/paperclip-runner/runner ./runner
 RUN cd runner && cargo chef prepare --recipe-path /tmp/runner-recipe.json
 
 FROM rust-chef AS runner-deps
 WORKDIR /app/packages/paperclip-runner/runner
-COPY packages/paperclip-runner/rust-toolchain.toml ../
+COPY --from=normalized-inputs /app/packages/paperclip-runner/rust-toolchain.toml ../
 # The recipe changes only when dependency manifests, the lockfile, or target
 # metadata change. Source edits can reuse this compiled dependency layer.
 COPY --from=runner-plan /tmp/runner-recipe.json /tmp/runner-recipe.json
@@ -119,9 +146,9 @@ WORKDIR /app/packages/paperclip-runner
 # Rust embeds protocol schemas and fixtures with include_str!. Keep those
 # alongside the complete Cargo workspace so every compile-time input keys
 # this layer. Ordinary server/UI edits can then reuse the native build.
-COPY packages/paperclip-runner/rust-toolchain.toml ./
-COPY packages/paperclip-runner/runner ./runner
-COPY packages/paperclip-runner/protocol ./protocol
+COPY --from=normalized-inputs /app/packages/paperclip-runner/rust-toolchain.toml ./
+COPY --from=normalized-inputs /app/packages/paperclip-runner/runner ./runner
+COPY --from=normalized-inputs /app/packages/paperclip-runner/protocol ./protocol
 # Cargo fingerprints source mtimes. Normalize them here and after the full
 # source copy below so a fresh checkout cannot invalidate unchanged inputs.
 RUN find runner protocol -type f -exec touch -d @0 {} + \
@@ -132,6 +159,8 @@ FROM runner-build AS build
 WORKDIR /app
 COPY --from=deps /app /app
 COPY . .
+COPY --from=normalized-inputs /app/packages/paperclip-runner packages/paperclip-runner
+COPY --from=normalized-inputs /app/patches patches
 RUN find packages/paperclip-runner/runner packages/paperclip-runner/protocol -type f -exec touch -d @0 {} + \
   && touch -d @0 packages/paperclip-runner/rust-toolchain.toml
 # Both the browser bundle and server stamp need the source commit. Declare it
@@ -170,6 +199,13 @@ RUN mkdir -p /provider-pack /provider-pack-transport \
   fi
 
 FROM base AS production
+COPY --from=local-agents /usr/local/bin/uv /usr/local/bin/uv
+COPY --from=local-agents /opt/agent-python /opt/agent-python
+COPY --from=local-agents /opt/hermes-agent /opt/hermes-agent
+COPY --from=local-agents /opt/pi-agent /opt/pi-agent
+ENV PATH="/opt/hermes-agent/.venv/bin:/opt/pi-agent/bin:${PATH}" \
+    UV_PYTHON_INSTALL_DIR=/opt/agent-python \
+    PYTHONDONTWRITEBYTECODE=1
 ARG USER_UID=1000
 ARG USER_GID=1000
 # Refreshes the tool layer below when it changes (CI stamps an ISO week, so
@@ -189,7 +225,7 @@ RUN echo "cli-tools-epoch: ${CLI_TOOLS_CACHE_EPOCH}" \
   && mkdir -p /paperclip \
   && chown node:node /paperclip
 
-COPY scripts/docker-entrypoint.sh /usr/local/bin/
+COPY --from=normalized-inputs /app/scripts/docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 COPY --chown=node:node --from=build /app /app

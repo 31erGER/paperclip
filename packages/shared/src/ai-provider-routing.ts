@@ -57,16 +57,20 @@ export const aiProviderRoutingSchema = z
         const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(
           url.hostname,
         );
+        // Docker Desktop (and Linux's explicit host-gateway mapping) uses this
+        // fixed alias for inference on the physical host. Do not allow general
+        // private-network names/IPs or suffix matches as local endpoints.
+        const localEndpoint = loopback || (route.kind === "local" && url.hostname === "host.docker.internal");
         if (
           url.username ||
           url.password ||
           url.search ||
           url.hash ||
-          (url.protocol !== "https:" && !(url.protocol === "http:" && loopback))
+          (url.protocol !== "https:" && !(url.protocol === "http:" && localEndpoint))
         )
           throw new Error();
-        if (route.kind === "local" && !loopback)
-          invalid("A local endpoint must use localhost or a loopback address.");
+        if (route.kind === "local" && !localEndpoint)
+          invalid("A local endpoint must use localhost, a loopback address, or host.docker.internal.");
       } catch {
         invalid(
           "Enter an HTTPS base URL without credentials, query parameters, or a fragment. Local endpoints may use HTTP.",

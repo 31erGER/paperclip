@@ -36,7 +36,12 @@ Use `/<company-prefix>/onboarding` to resume an existing company's agent setup;
 the unprefixed route starts at organization naming on self-hosted instances.
 Cloud-managed instances reuse their existing company for agent setup.
 
-Self-hosted first-agent setup also offers Hermes and Pi with **Local model**.
+Self-hosted first-agent setup also offers Hermes and Pi with **Local model**,
+including `authenticated/private` Docker after local account creation and claim.
+The fork image includes their pinned CLIs; host LM Studio is reachable through
+the exact `host.docker.internal` local endpoint alias. Claude/Codex credential
+switching survives delayed setup restoration. Copilot uses its token connection
+and does not display a subscription switch. See [Docker setup](../../doc/DOCKER.md#31erger-fork-local-agent-onboarding).
 Use **Connect LM Studio** to save a loopback Chat Completions endpoint (default
 `http://localhost:1234/v1`, no authentication), select its model, then test and
 finish. This path selects the local execution environment and CLI adapter; the

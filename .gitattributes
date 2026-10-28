@@ -1,1 +1,6 @@
-patches/*.patch whitespace=-space-before-tab
+# Sealed Runner manifests hash source bytes; keep Windows checkouts identical
+# to Git/CI. Auto detection preserves binary fixtures and provider assets.
+packages/paperclip-runner/** text=auto eol=lf
+patches/*.patch text eol=lf whitespace=-space-before-tab
+# Linux container entrypoints must not acquire a CR in their shebang.
+*.sh text eol=lf

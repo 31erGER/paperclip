@@ -6,8 +6,66 @@ All commands below assume you are in the **project root** (the directory contain
 
 ## Building the image
 
+### 31erGER fork: local agent onboarding
+
+Build the `codex/local-agent-onboarding` branch of the 31erGER fork to include
+the local setup and privacy changes. Building an original upstream checkout or
+restarting an older image does not update its compiled UI.
+
+The image now supplies Hermes (official source commit
+`bf0203a794a07aac3ff764972ab9087baa4e4f4e`, release v0.22.5) in an isolated
+Python3.14 environment, and Pi (`@earendil-works/pi-coding-agent@0.74.0`, matching
+the legacy adapter's pinned distribution). These tools are installed at image
+build time, outside the `/paperclip` data mount. Application startup does not
+install them. Both CLI entrypoints must also run as the unprivileged `node` user.
+The build arguments `HERMES_AGENT_COMMIT` and `PI_CODING_AGENT_VERSION` are the
+explicit upgrade points; review compatibility and privacy before changing them.
+
+For a fresh private instance, create your local account, claim the instance,
+then create the company and select Hermes or Pi in **Connect a model**. Claude,
+Codex and qualified GitHub Copilot remain separate choices. Copilot's current
+onboarding method is its token connection; no subscription toggle is offered
+for that choice. A delayed setup response must not replace a newly chosen
+Claude/Codex authentication method.
+
+For LM Studio running on the Docker host, enter
+`http://host.docker.internal:1234/v1`. `localhost` inside Paperclip means the
+container itself. The local routing validator accepts this exact Docker alias
+in addition to loopback; arbitrary LAN/public addresses and lookalike hostnames
+remain rejected. Docker Desktop supplies the alias. With Docker Engine on
+Linux, add `host.docker.internal:host-gateway` under Compose `extra_hosts` and
+make LM Studio reachable on the host's private Docker interface. Do not expose
+the inference port publicly.
+
+To rebuild this Compose service from the current fork revision in PowerShell:
+
+```powershell
+git switch codex/local-agent-onboarding
+git pull --ff-only
+$paperclipBuildRevision = git rev-parse HEAD
+docker compose -f docker/docker-compose.quickstart.yml build --build-arg "PAPERCLIP_BUILD_COMMIT=$paperclipBuildRevision"
+docker compose -f docker/docker-compose.quickstart.yml up -d --no-build
+```
+
+Keep the same persistent data directory and signing secrets. Do not remove
+volumes or recreate the database to refresh the UI. Building the Rust runner,
+Node dependencies and agent distributions consumes substantially more memory
+and disk than running an idle instance; build requirements and runtime
+requirements must be measured separately.
+
+Compose explicitly builds the self-hosted `production` target. Use
+`--target production` with direct Docker builds too; `cloud` is a separate
+optional target with additional hosted-service packages.
+
+Windows checkouts may contain CRLF bytes. The `normalized-inputs` build stage
+runs `scripts/normalize-docker-build-inputs.mjs` before dependency/Runner checks
+and before copying the entrypoint. It restores canonical LF text for Runner
+inputs, patch files and the entrypoint; binary fixtures are preserved. It does
+not regenerate protocol contracts or bypass integrity checks. `.gitattributes`
+also requests LF for these paths on future checkouts.
+
 ```sh
-docker build -t paperclip-local .
+docker build --target production -t paperclip-local .
 ```
 
 The Dockerfile installs common agent tools (`git`, `gh`, `curl`, `wget`, `ripgrep`, `python3`) and the Claude, Codex, and OpenCode CLIs.
@@ -28,7 +86,7 @@ or earlier build inputs change. Local builds can set a new epoch explicitly
 to refresh tools without clearing the entire build cache.
 
 ```sh
-docker build -t paperclip-local \
+docker build --target production -t paperclip-local \
   --build-arg USER_UID=$(id -u) --build-arg USER_GID=$(id -g) .
 ```
 
@@ -80,7 +138,7 @@ image before rollout. Resolve immutable digests instead of deploying mutable tag
 ## One-liner (build + run)
 
 ```sh
-docker build -t paperclip-local . && \
+docker build --target production -t paperclip-local . && \
 docker run --name paperclip \
   -p 3100:3100 \
   -e HOST=0.0.0.0 \

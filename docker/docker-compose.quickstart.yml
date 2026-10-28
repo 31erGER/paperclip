@@ -13,6 +13,7 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
+      target: production
     # Ceiling on processes. The image makes tini PID 1 so orphaned agent
     # descendants are reaped instead of piling up as zombies; this is the
     # backstop if something leaks anyway — the container hits its own limit and
@@ -26,7 +27,7 @@ services:
       HOST: "0.0.0.0"
       PAPERCLIP_HOME: "/paperclip"
 
-      # ── LLM provider keys (at least one is needed for agents to work) ──
+      # ── Optional cloud provider keys (local LM Studio needs no key) ──
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
 
