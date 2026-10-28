@@ -6,6 +6,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetAppBrandManifestCacheForTests } from "@/lib/app-brand-assets";
 import { AppLogo } from "./AppLogo";
 
+// Preserve remote-fallback capability coverage when deliberately re-enabled.
+// PassiveIcon.privacy.test.tsx uses the actual closed installation policy.
+vi.mock("@paperclipai/shared/privacy-policy", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@paperclipai/shared/privacy-policy")>(),
+  PASSIVE_REMOTE_IMAGES_ENABLED: true,
+}));
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 

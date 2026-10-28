@@ -1,10 +1,11 @@
 import { MarkdownWordStreaming, rehypeStreamingWords } from "./MarkdownWordStreaming";
-import { isValidElement, memo, useContext, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, isValidElement, memo, useContext, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, ExternalLink, WrapText } from "lucide-react";
 import Markdown, { defaultUrlTransform, type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "../lib/utils";
+import { canLoadImagePassively } from "../lib/image-privacy";
 import { GithubIcon } from "@/components/icons/github-icon";
 import { Link, useCaseHref } from "@/lib/router";
 import { useTheme } from "../context/ThemeContext";
@@ -393,9 +394,34 @@ function extractMermaidSource(children: ReactNode): string | null {
   return flattenText(childProps.children).replace(/\n$/, "");
 }
 
-function safeMarkdownUrlTransform(url: string): string {
+function safeMarkdownUrlTransform(url: string, key?: string): string {
+  if (key === "src" && (/^data:image\//i.test(url) || /^blob:/i.test(url))) return url;
   if (url.startsWith(WORKSPACE_FILE_HREF_PREFIX)) return url;
   return parseMentionChipHref(url) ? url : defaultUrlTransform(url);
+}
+
+const MarkdownImageInsideLink = createContext(false);
+
+function MarkdownImage({ src, alt, ...props }: React.ComponentProps<"img">) {
+  const [loadedSrc, setLoadedSrc] = useState<string>();
+  const insideLink = useContext(MarkdownImageInsideLink);
+  if (!src) return <span>{alt || "Untitled image"}</span>;
+  const passive = canLoadImagePassively(src);
+  if (!passive && loadedSrc !== src) {
+    // Linked badges retain their original navigation without nested links or
+    // buttons. Loading the document must still never request the badge.
+    if (insideLink) return <span title={props.title ?? src}>Image: {alt || "Untitled image"}</span>;
+    return (
+      <span data-markdown-image-reference title={props.title}>
+        Image: {alt || "Untitled image"}{" "}
+        <button type="button" className="underline" onClick={(event) => { event.preventDefault(); setLoadedSrc(src); }}>
+          Load external image
+        </button>{" "}
+        <a href={src} target="_blank" rel="noopener noreferrer">Open image</a>
+      </span>
+    );
+  }
+  return <img {...props} src={src} alt={alt ?? ""} referrerPolicy={passive ? props.referrerPolicy : "no-referrer"} />;
 }
 
 type MarkdownAstNode = {
@@ -1002,18 +1028,26 @@ function MarkdownBodyImpl({
       );
     },
     };
+    // The renderer above is a component; Components also permits arbitrary
+    // intrinsic tag strings (including SVG), which are not used here.
+    const Anchor = map.a as Exclude<Components["a"], string | undefined>;
+    map.a = (props) => (
+      <MarkdownImageInsideLink.Provider value={true}>
+        <Anchor {...props} />
+      </MarkdownImageInsideLink.Provider>
+    );
     if (mediaMode === "reference") {
       map.img = ({ src, alt, title }) => (
         <span data-markdown-image-reference title={title}>
           Image: {alt || "Untitled image"}{src ? ` (${src})` : ""}
         </span>
       );
-    } else if (resolveImageSrc || onImageClick) {
+    } else {
       map.img = ({ node: _node, src, alt, ...imgProps }) => {
         const resolved = resolveImageSrc && src ? resolveImageSrc(src) : null;
-        const finalSrc = resolved ?? src;
+        const finalSrc = safeMarkdownUrlTransform(resolved ?? src ?? "", "src");
         return (
-          <img
+          <MarkdownImage
             {...imgProps}
             src={finalSrc}
             alt={alt ?? ""}
