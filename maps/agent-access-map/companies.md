@@ -216,6 +216,11 @@ Agent access: `operator-only` — configuration and tests require board context.
 Policy: Company access and Manage connections permission; non-managing board readers receive no settings.
 Credentials are write-only and stored through company secret bindings.
 
+Fork policy additionally refuses diagnostic connection tests with
+`403 external_diagnostics_disabled` and resolves saved destinations as disabled
+while `EXTERNAL_DIAGNOSTICS_ENABLED` is false. Board permissions cannot bypass
+this installation gate. See [privacy controls](../../doc/PRIVACY-AUDIT.md).
+
 Evidence: `source-only` — [routes](../../server/src/routes/agent-observability.ts).
 
 Verification: `not-run` — exercise board management, restricted board, agent denial, and cross-company denial.

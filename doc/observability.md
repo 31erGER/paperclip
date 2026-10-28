@@ -1,5 +1,13 @@
 # Observability
 
+> In the 31erGER fork, `EXTERNAL_DIAGNOSTICS_ENABLED` is `false` in
+> `packages/shared/src/privacy-policy.ts`. Server/browser Sentry, server OTLP,
+> company agent exporters, diagnostic tests and feedback trace uploads remain
+> disabled even when configured. The upstream opt-in instructions below apply
+> only after deliberately changing that source policy and rebuilding. Local run
+> logs and audit history remain available. See [PRIVACY-AUDIT.md](PRIVACY-AUDIT.md)
+> for exact boundaries, re-enabling and update guidance.
+
 This document is the Observability contract. It covers the OpenTelemetry
 trace path, the opt-in Sentry error-monitoring path, and two local
 instrumentation contracts; see the

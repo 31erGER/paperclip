@@ -121,6 +121,11 @@ Core administration/import/export/operator workflows are mapped; cloud/self-host
 
 ### `agent-observability`
 
+Fork policy: external delivery and connection tests are disabled by
+`EXTERNAL_DIAGNOSTICS_ENABLED = false`; configured destinations cannot activate
+exports. The retained upstream journey below requires deliberately re-enabling
+that source flag and rebuilding. See [privacy controls](../../doc/PRIVACY-AUDIT.md).
+
 Use Company Settings → General → Agent observability. Select Braintrust or Custom OTLP,
 save credentials and capture settings, then test the saved destination. Saving is offline;
 the test originates at the control plane and does not prove remote runner reachability.

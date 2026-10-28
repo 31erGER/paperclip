@@ -14,7 +14,9 @@ this change disables emission and adds no event names, fields or wire formats.
 No in-repository generator exists for that upstream artifact. Do not hand-edit
 it to describe an emission policy. `privacy.test.ts` exercises the actual policy;
 historical transport tests explicitly mock the gate open only inside tests.
-The complete change requires independent privacy review.
+The disable-emission change received independent source-level privacy review
+on 2026-10-28; findings and verification limits are recorded in
+`doc/PRIVACY-AUDIT.md`. Future telemetry changes still require privacy review.
 
 Sentry, OpenTelemetry, agent diagnostic exporters and feedback trace uploads
 have independent enforcement at their owning boundaries. Local run history,

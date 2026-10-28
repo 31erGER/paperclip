@@ -1,3 +1,8 @@
+> **31erGER fork privacy policy:** Background usage telemetry, external diagnostics,
+> product-news requests and passive third-party images are disabled. Agent tools,
+> model access and update checks remain available. See [the audit and reversible
+> switches](doc/PRIVACY-AUDIT.md), including guidance for future updates.
+
 <p align="center">
   <img src="doc/assets/banner.jpg" alt="Paperclip is the app people use to manage AI agents for work." width="720" />
 </p>

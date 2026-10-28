@@ -1,6 +1,6 @@
 # Privacy controls in the 31erGER fork
 
-Audit and implementation date: 2026-10-27.
+Audit and implementation dates: 2026-10-27–28.
 
 The goal is to prevent unnecessary background tracking and diagnostic exports.
 Agents may use Internet searches, configured model providers and integrations.
@@ -36,14 +36,30 @@ upstream transport coverage without a production test-mode bypass.
 | `server/src/instrumentation.ts` started OpenTelemetry when an OTLP endpoint existed | Gate before SDK import, trace/context helpers and plugin span reporting | Export of server trace diagnostics. Local execution logs remain. |
 | `server/src/services/agent-observability.ts` resolved Braintrust/custom OTLP settings and credentials; `forTest` bypassed saved enabled=false | Gate saved destination resolution and explicit tests; `agent-observability-test.ts` separately refuses transport; adapter launch material stays disabled | External agent trace dashboards, including optional prompt/response/tool capture. |
 | `server/src/services/feedback-share-client.ts` uploaded compressed full trace bundles to a default Paperclip endpoint or configured destination, independently of normal telemetry opt-outs | Refuse before reading/serializing/uploading; the owning feedback service prevents sharing and background retries | External diagnostic sharing. Local feedback/bundle history stays available. |
-| Legacy adapter processes inherited exporter endpoints, DSNs and CLI telemetry settings | Shared child-launch privacy environment and adapter diagnostic gates; documented Pi/Claude opt-outs | Known child-runtime diagnostics only. Provider credentials, routing, proxies and network tools remain available. |
+| Legacy adapter processes and plugin workers inherited exporter endpoints, DSNs and CLI telemetry settings | `packages/adapter-utils/src/diagnostic-env.ts`, shared local/SSH/sandbox and ACP launch boundaries, Hermes probes and `server/src/services/plugin-worker-manager.ts`; Pi/Claude opt-outs | Known child-runtime diagnostics only. Provider credentials, routing, proxies and network tools remain available. |
+| Direct automatic Claude auth/usage and Codex quota probes bypassed the common launcher | Both adapters' `src/server/quota.ts` apply the same privacy environment at their actual exec/spawn boundaries | Diagnostic inheritance only; account/quota detection remains available. |
 | `server/src/config.ts` enabled the hosted announcements feed by default | Separate announcements flag prevents its automatic production use | Product-news announcements; updates remain enabled. |
-| `ui/src/components/MarkdownBody.tsx`, `Identity.tsx`, `SidebarAccountMenu.tsx` and its production variant rendered external images directly | Same-origin/embedded media remains; remote Markdown images require a user load action; remote avatars fall back to initials | Automatic third-party images, which can act as tracking pixels. |
+| `ui/src/components/MarkdownBody.tsx`, `ui/src/components/ui/avatar.tsx`, `ui/src/components/SkillCardIcon.tsx` and `ui/src/pages/apps/AppLogo.tsx` rendered external images directly | `ui/src/lib/image-privacy.ts` permits same-origin/embedded media; remote Markdown images require a user load action; remote avatars/icons fall back to initials. The shared avatar gate precedes Radix preloading and omits responsive srcSet candidates while disabled. | Automatic third-party images, which can act as tracking pixels. |
 
 These findings establish data-transfer paths and privacy risks, not proof of
 malicious intent. Sentry/OTLP were operator-configured, and some diagnostic
 sharing required a user action; their independent activation paths still made
 the normal telemetry opt-out insufficient for this fork's policy.
+
+Feedback votes and diagnostic bundles remain local. A stored sharing preference
+is preserved for reversal, but the effective setting is `not_allowed` while the
+policy is closed. Explicit export/test requests fail with
+`403 external_diagnostics_disabled`; background upload retries become idle.
+
+The launch helper removes case-insensitive `OTEL_*`, `SENTRY_*`,
+`BETA_TRACING_ENDPOINT` and `PAPERCLIP_OBSERVABILITY_CODEX_CONFIG` settings,
+then forces SDK/exporter opt-outs and the known CLI controls (`DO_NOT_TRACK=1`,
+`PI_TELEMETRY=0`, `DISABLE_TELEMETRY=1`, `DISABLE_ERROR_REPORTING=1`, Claude
+telemetry/beta tracing off). It runs after environment merges. Exact public
+opt-out values are excluded from diagnostic-secret matching so local quota
+times/error IDs remain readable; actual credentials remain redacted. The
+broad Claude nonessential-traffic switch is intentionally not forced because
+it also disables the updater.
 
 ## Functions that must remain
 
@@ -62,6 +78,13 @@ telemetry-free. In particular, a Hermes-specific opt-out must be verified agains
 the installed Hermes version rather than invented. Untrusted plugins can still
 make Internet requests; blocking all such requests would also block the searches
 and tools the user explicitly wants to keep.
+
+The Node launch guards cover the legacy adapters, direct quota/probe children
+and Node plugin workers listed above. Independent native Rust Runner launchers
+and independently installed executables have their own environment/profile
+rules; this audit does not certify their diagnostic behavior. Company exporter
+resolution at the server is disabled for all consumers, but that is not an
+OS-wide firewall or proof that every third-party runtime is telemetry-free.
 
 ## Future updates
 
@@ -95,6 +118,51 @@ without conflicting with existing gates. After every upstream merge:
 
 ## Verification record
 
-Implementation and verification are in progress. Record the final successful
-commands, remaining platform limitations and independent privacy review here
-before the privacy changes are marked complete.
+Target: this source checkout on native Windows, Node 24.16.0, pnpm 9.15.4.
+Tests use isolated fixtures/local embedded databases, not production data.
+
+- Final `pnpm check:privacy`: 19 files, 75 tests passed with the actual closed
+  production flags. The wrapper was invoked with the cached pinned pnpm in
+  offline mode; the check itself uses installed Node/Vitest and no installer.
+- Core telemetry/update regressions: 8 files, 47 tests passed.
+- Server diagnostic/legacy transport regressions: 12 files passed, 145 tests
+  passed; 1 file / 18 tests skipped by their existing conditions. The separate
+  real-database feedback suite passed 2 tests, including retained local votes,
+  bundles and saved sharing preferences.
+- Runtime launch regressions: 8 files, 136 tests passed, including real benign
+  child-process/worker boundaries. The expanded quota/readability run passed
+  82 tests and retained 8 Windows fixture failures (ACPX 0.13.1 rejects their
+  unchanged raw command strings and requires argv arrays). All 8 selected
+  pinned ACPX 0.12.0 real-process quota cases passed separately.
+- UI compatibility: 8 files, 140 tests passed. Avatar/icon/quota review-gap
+  regression run: 6 files, 27 tests passed. These counts overlap the privacy
+  runner and must not be summed as unique coverage.
+- Shared, adapter-utils, Claude/Codex adapter and UI typechecks passed; the UI
+  production build passed. `node scripts/check-maps.mjs` passed structural
+  validation.
+- Independent focused privacy review resolved its avatar/icon/quota findings
+  and found no remaining actionable defect in those changes. It was a source
+  review, not a network capture or live third-party-agent certification.
+
+The full repository checks were attempted again. Recursive typecheck stops at
+the unchanged Runner ACP profile checksum assertion; `pnpm test:run` fails
+with `spawn pnpm ENOENT` on Windows; the full build stops at the shared
+package's POSIX `mkdir -p` / `cp` command under cmd. The token gate still
+reports 75 color and 31 arbitrary-value violations outside this privacy diff.
+Existing adapter observability tests also retain Windows file-mode/symlink
+limitations. These failures are not covered by the passing targeted checks.
+
+The first expanded ACP quota run exposed a real privacy-change regression:
+public opt-out values were treated as secrets and obscured local errors. The
+new regression and fix preserve credential redaction while keeping public
+control values readable. Earlier failing results are retained in the local
+verification logs rather than discarded after a successful retry.
+
+The exact-public-setting exception received a second independent security
+review with no findings. Unknown-key short credentials, arbitrary values under
+familiar keys, configured credentials and the explicit auth token still join
+the redaction set.
+
+Local logs are in `.superpowers/sdd/2026-10-27-privacy-hardening/` (ignored by
+Git). This document records portable outcomes; it does not claim a live model
+run or a packet-capture proof of zero external traffic.

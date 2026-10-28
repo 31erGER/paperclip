@@ -21,15 +21,33 @@ For each owned behavior: add a meaningful regression, observe failure, implement
 
 ## Acceptance
 
-- [ ] Explicit enabled flags, remote DSNs, OTLP endpoints and saved export settings cannot activate diagnostics.
-- [ ] Direct telemetry clients and plugin events create no tracking state, timers or outgoing requests.
-- [ ] Trace uploads and diagnostic connection tests cannot send user data.
-- [ ] Known child diagnostic settings are suppressed without denying Internet.
-- [ ] Reading imported content/profile images makes no passive remote image request.
-- [ ] Updates, model connections, web searches and local task/audit logs remain available.
-- [ ] Targeted tests/typechecks/build and applicable repo checks run; retain baseline failures in the report.
-- [ ] Independent privacy review complete; verified increments committed and pushed.
+- [x] Explicit enabled flags, remote DSNs, OTLP endpoints and saved export settings cannot activate diagnostics.
+- [x] Direct telemetry clients and plugin events create no tracking state, timers or outgoing requests.
+- [x] Trace uploads and diagnostic connection tests cannot send user data.
+- [x] Known child diagnostic settings are suppressed without denying Internet.
+- [x] Reading imported content/profile images makes no passive remote image request.
+- [x] Updates, model connections, web searches and local task/audit logs remain available.
+- [x] Targeted tests/typechecks/build and applicable repo checks run; retain baseline failures in the report.
+- [x] Independent privacy review complete; verified increments committed and pushed.
 
 ## Existing verification limits
 
 From the preceding setup change: full recursive typecheck hits a pre-existing Runner profile checksum assertion; full test runner cannot spawn `pnpm` on Windows; full build's POSIX copy script fails under cmd; token gates have 106 pre-existing violations outside changed UI. Shared/UI typechecks and UI production build passed. Database integration tests pass when run without competing builds.
+
+## Review and verification follow-up (2026-10-28)
+
+Independent review found bypasses in Radix avatar preloading, skill/app icons and
+direct Claude/Codex quota subprocesses. All were reproduced and closed at their
+owning boundaries. Expanded ACP tests exposed over-redaction of public privacy
+opt-out values; an exact key/value exception preserves credentials and received
+a second independent security review with no findings.
+
+The privacy command uses the installed Node/Vitest runtime without package
+downloads. Full-check failures and the remaining ACPX 0.13.1 Windows fixture
+errors are retained in [the audit](../PRIVACY-AUDIT.md). Current pinned ACPX
+0.12.0 real-process quota cases pass. No live provider/search or independent
+native Rust runtime certification is claimed.
+
+Final `pnpm check:privacy`: 19 files / 75 tests passed. Shared, adapter-utils,
+Claude/Codex adapter and UI typechecks passed; UI production build and map
+validation passed. The full repository checks remain limited as recorded above.
