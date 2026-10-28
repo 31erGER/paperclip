@@ -719,6 +719,11 @@ function OnboardingWizardInner({
   const [createdCompanyId, setCreatedCompanyId] = useState<string | null>(
     existingCompanyId ?? (saved?.createdCompanyId as string) ?? null
   );
+  const explicitCredentialModeCompany = useRef<string | null>(null);
+  const chooseCredentialMode = (next: CredentialMode) => {
+    explicitCredentialModeCompany.current = createdCompanyId;
+    setCredentialMode(next);
+  };
   const savedKeys = useSavedProviderKeys(
     createdCompanyId,
     apiKeyEnvKeyFor(adapterType),
@@ -1378,10 +1383,14 @@ function OnboardingWizardInner({
             setUrl(typeof config.url === "string" ? config.url : "");
             setRunner(agent.adapterType === "paperclip_runner" ? "paperclip" : "legacy");
             const binding = agent.runtimeConfig?.aiConnection as AiConnectionBinding | undefined;
-            if (binding) setCredentialMode(binding.method === "api_key" ? "api" : "subscription");
-            else if ((config.env as Record<string, unknown> | undefined)?.[apiKeyEnvKeyFor(adapterType)]) setCredentialMode("api");
-            else if ((config.env as Record<string, unknown> | undefined)?.[CLAUDE_OAUTH_TOKEN_ENV_KEY]
-              || (config.env as Record<string, unknown> | undefined)?.CODEX_HOME) setCredentialMode("subscription");
+            // A late restore may supply defaults, but cannot undo the method
+            // the user explicitly chose while this company's setup was loading.
+            if (explicitCredentialModeCompany.current !== companyId) {
+              if (binding) setCredentialMode(binding.method === "api_key" ? "api" : "subscription");
+              else if ((config.env as Record<string, unknown> | undefined)?.[apiKeyEnvKeyFor(adapterType)]) setCredentialMode("api");
+              else if ((config.env as Record<string, unknown> | undefined)?.[CLAUDE_OAUTH_TOKEN_ENV_KEY]
+                || (config.env as Record<string, unknown> | undefined)?.CODEX_HOME) setCredentialMode("subscription");
+            }
             if (config.provider === "acpx" && config.acpxAgent === "copilot") setCopilotConnection(binding);
           }
         }
@@ -3096,7 +3105,7 @@ function OnboardingWizardInner({
                       transition={{ opacity: SOURCE_LINK_EXIT, height: MAKE_ROOM }}
                     >
                       <div className="-ml-3 mt-1">
-                        {!isLocalSource && <CredentialModeLink mode={credentialMode} onChange={setCredentialMode} />}
+                        {!isLocalSource && !isCopilot && <CredentialModeLink mode={credentialMode} onChange={chooseCredentialMode} />}
                         {savedKeys.options.length > 0 && <p className="px-3 text-sm text-muted-foreground">{savedKeys.options.length} saved API {savedKeys.options.length === 1 ? "key available" : "keys available"}.</p>}
                         {credentialMode === "subscription" && authSignalStatus === "present" && <p className="px-3 text-sm text-muted-foreground">An existing provider connection is available.</p>}
                       </div>

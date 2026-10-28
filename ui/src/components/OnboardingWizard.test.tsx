@@ -2156,6 +2156,72 @@ describe("OnboardingWizard restore-gate (stale localStorage across accounts)", (
       return { root, queryClient };
     }
 
+    it.each(["local_trusted", "authenticated"])("offers local engines on a private %s installation", async deploymentMode => {
+      localHealth.get.mockResolvedValue({ deploymentMode, deploymentExposure: "private", localAiLoginSupported: true });
+      mockAdapterRegistry.list = [{ type: "claude_local" }, { type: "codex_local" }, { type: "hermes_local" }, { type: "pi_local" }, { type: "paperclip_runner" }];
+      const { root } = await openStep4();
+      try {
+        const sources = document.querySelector('[aria-label="Model source"]')!;
+        // The display registry fixture labels these two by adapter ID.
+        expect(sources.textContent).toContain("hermes_localLocal model");
+        expect(sources.textContent).toContain("pi_localLocal model");
+        expect(sources.textContent).toContain("GitHub Copilot");
+      } finally { await act(async () => root.unmount()); }
+    });
+
+    it("does not offer a subscription switch for a restored token-only Copilot choice", async () => {
+      mockAdapterRegistry.list = [{ type: "claude_local" }, { type: "codex_local" }, { type: "paperclip_runner" }];
+      const { root } = await openStep4({ adapterType: "paperclip_runner", onboardingCopilot: true });
+      try {
+        expect(document.querySelector('[aria-label="Use subscription instead"]')).toBeNull();
+      } finally { await act(async () => root.unmount()); }
+    });
+
+    it.each(["claude_local", "codex_local"])("switches both credential methods for %s before provider sign-in", async adapterType => {
+      const { root } = await openStep4({ adapterType, credentialModeChoice: "api" });
+      try {
+        await act(async () => (document.querySelector('[aria-label="Use subscription instead"]') as HTMLButtonElement).click());
+        expect(JSON.parse(window.localStorage.getItem(ONBOARDING_STORAGE_KEY)!).credentialMode).toBe("subscription");
+        await act(async () => (document.querySelector('[aria-label="Use API key instead"]') as HTMLButtonElement).click());
+        expect(JSON.parse(window.localStorage.getItem(ONBOARDING_STORAGE_KEY)!).credentialMode).toBe("api");
+        expect(managedApi.startLocalLogin).not.toHaveBeenCalled();
+      } finally { await act(async () => root.unmount()); }
+    });
+
+    it.each([false, true])("respects disabled adapters and managed-only policy for local sources (%s)", async managedOnly => {
+      mockAdapterRegistry.list = [{ type: "claude_local" }, { type: "hermes_local" }, { type: "pi_local" }];
+      mockAdapterRegistry.disabled = new Set(["hermes_local"]);
+      mockInstanceSettingsApi.getExperimental.mockResolvedValue({ enableManagedSandboxOnly: managedOnly });
+      const { root, queryClient } = await openStep4();
+      try {
+        await vi.waitFor(() => expect(queryClient.getQueryData(queryKeys.instance.experimentalSettings)).toMatchObject({ enableManagedSandboxOnly: managedOnly }));
+        await vi.waitFor(() => {
+          const sources = document.querySelector('[aria-label="Model source"]')!;
+          expect(sources.textContent).not.toContain("hermes_local");
+          expect(sources.textContent?.includes("pi_local")).toBe(!managedOnly);
+        });
+      } finally { await act(async () => root.unmount()); }
+    });
+
+    it("preserves a newer explicit method choice when saved setup arrives late", async () => {
+      let finish!: (value: unknown) => void;
+      const setupId = "00000000-0000-4000-8000-000000000097";
+      mockAgentsApi.create.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }) as never);
+      const { root } = await openStep4({ setupAgentId: setupId, credentialModeChoice: "api" });
+      try {
+        const switcher = document.querySelector('[aria-label="Use subscription instead"]') as HTMLButtonElement;
+        expect(switcher).toBeTruthy();
+        await act(async () => switcher.click());
+        expect(document.querySelector('[aria-label="Use API key instead"]')).toBeTruthy();
+        await act(async () => finish({ id: setupId, companyId: "company-new", name: "Ada", role: "general",
+          adapterType: "claude_local", adapterConfig: {}, pauseReason: "setup",
+          runtimeConfig: { aiConnection: { provider: "anthropic", method: "api_key", mode: "responsible_user" } } }));
+        for (let i = 0; i < 5; i++) await flushReact();
+        expect(document.querySelector('[aria-label="Use API key instead"]')).toBeTruthy();
+        expect(JSON.parse(window.localStorage.getItem(ONBOARDING_STORAGE_KEY)!).credentialModeChoice).toBe("subscription");
+      } finally { await act(async () => root.unmount()); }
+    });
+
     it.each(["hermes_local", "pi_local"])("configures %s with LM Studio without cloud credentials", async adapterType => {
       mockAdapterRegistry.list.push({ type: adapterType });
       mockEnvironmentsApi.list.mockResolvedValue([LOCAL_ENVIRONMENT, SANDBOX_ENVIRONMENT]);
