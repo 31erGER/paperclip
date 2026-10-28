@@ -38,6 +38,7 @@ import { getManagedInstanceConfig, type ManagedInstanceConfig } from "./managed-
 import { getOperatorSettingDefaults } from "./setting-defaults.js";
 import { isCloudStagingExperimentalSetting, isCloudStagingInstance } from "./cloud-instance.js";
 import { forbidden } from "../errors.js";
+import { EXTERNAL_DIAGNOSTICS_ENABLED } from "@paperclipai/shared/privacy-policy";
 
 const DEFAULT_SINGLETON_KEY = "default";
 const instanceGeneralSettingsStorageSchema = instanceGeneralSettingsSchema.strip();
@@ -457,7 +458,8 @@ export function instanceSettingsService(db: Db, options: InstanceSettingsService
   const operatorDefaults = getOperatorSettingDefaults(options.runtimeEnv ?? process.env);
 
   function toGeneralView(raw: unknown): InstanceGeneralSettings {
-    return applyOperatorGeneralDefaults(normalizeGeneralSettings(raw), operatorDefaults);
+    const general = applyOperatorGeneralDefaults(normalizeGeneralSettings(raw), operatorDefaults);
+    return EXTERNAL_DIAGNOSTICS_ENABLED ? general : { ...general, feedbackDataSharingPreference: "not_allowed" };
   }
 
   function toExperimentalView(raw: unknown): InstanceExperimentalSettingsWithManaged {

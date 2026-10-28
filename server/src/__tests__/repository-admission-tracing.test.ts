@@ -10,6 +10,10 @@ import { withDirectoryPublicationLock } from "@paperclipai/adapter-utils/workspa
 import { createDb, executionWorkspaceRepositories, executionWorkspaces, issues, projects, projectWorkspaces, EMBEDDED_POSTGRES_TEST_TIMEOUT_MS } from "@paperclipai/db";
 import { eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@paperclipai/shared/privacy-policy", async importOriginal => ({
+  ...await importOriginal<typeof import("@paperclipai/shared/privacy-policy")>(), EXTERNAL_DIAGNOSTICS_ENABLED: true,
+}));
 import { createRunPreparationTiming, withRunExecutionTiming } from "../services/execution-preparation-timing.js";
 import { executionWorkspaceRepositoryService } from "../services/execution-workspace-repositories.js";
 import { authorizationService } from "../services/authorization.js";

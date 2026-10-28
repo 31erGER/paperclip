@@ -1,4 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@paperclipai/shared/privacy-policy", async importOriginal => ({
+  ...await importOriginal<typeof import("@paperclipai/shared/privacy-policy")>(), EXTERNAL_DIAGNOSTICS_ENABLED: true,
+}));
 import { createRequire } from "node:module";
 import os from "node:os";
 import http from "node:http";

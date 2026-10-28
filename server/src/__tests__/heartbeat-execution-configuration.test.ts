@@ -1,4 +1,8 @@
 import { enableRunFailureReporting } from "./helpers/run-failure-reporting.js";
+
+vi.mock("@paperclipai/shared/privacy-policy", async importOriginal => ({
+  ...await importOriginal<typeof import("@paperclipai/shared/privacy-policy")>(), EXTERNAL_DIAGNOSTICS_ENABLED: true,
+}));
 import { createHash, randomUUID } from "node:crypto";
 import { trace } from "@opentelemetry/api";
 import { InMemorySpanExporter, SimpleSpanProcessor, TracerProvider } from "@opentelemetry/sdk-trace";

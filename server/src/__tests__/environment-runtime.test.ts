@@ -1,4 +1,8 @@
 import { JsonRpcCallError } from "@paperclipai/plugin-sdk";
+
+vi.mock("@paperclipai/shared/privacy-policy", async importOriginal => ({
+  ...await importOriginal<typeof import("@paperclipai/shared/privacy-policy")>(), EXTERNAL_DIAGNOSTICS_ENABLED: true,
+}));
 import { collectRunFailureDiagnostics } from "../services/run-failure-diagnostics.js";
 import { createSandboxOrphanCleanupSpool } from "../services/sandbox-orphan-cleanup-spool.js";
 import { idleWorkSnapshot } from "../services/task-admission.js";

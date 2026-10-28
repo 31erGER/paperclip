@@ -1,6 +1,10 @@
 import express from "express";
 import request from "supertest";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@paperclipai/shared/privacy-policy", async importOriginal => ({
+  ...await importOriginal<typeof import("@paperclipai/shared/privacy-policy")>(), EXTERNAL_DIAGNOSTICS_ENABLED: true,
+}));
 import { errorHandler } from "../middleware/index.js";
 import { authRoutes } from "../routes/auth.js";
 

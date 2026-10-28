@@ -1,6 +1,8 @@
 import { gzipSync } from "node:zlib";
 import type { FeedbackTraceBundle } from "@paperclipai/shared";
+import { EXTERNAL_DIAGNOSTICS_ENABLED } from "@paperclipai/shared/privacy-policy";
 import type { Config } from "../config.js";
+import { forbidden } from "../errors.js";
 
 export const FEEDBACK_UPLOAD_TIMEOUT_MS = 30_000;
 
@@ -22,10 +24,13 @@ export function createFeedbackTraceShareClientFromConfig(
 ): FeedbackTraceShareClient {
   const baseUrl = config.feedbackExportBackendUrl?.trim() || DEFAULT_FEEDBACK_EXPORT_BACKEND_URL;
   const token = config.feedbackExportBackendToken?.trim();
-  const endpoint = new URL("/feedback-traces", baseUrl).toString();
 
   return {
     async uploadTraceBundle(bundle, shutdownSignal) {
+      if (!EXTERNAL_DIAGNOSTICS_ENABLED) {
+        throw forbidden("External diagnostics are disabled by this installation's privacy policy.", { code: "external_diagnostics_disabled" });
+      }
+      const endpoint = new URL("/feedback-traces", baseUrl).toString();
       const deadline = AbortSignal.timeout(FEEDBACK_UPLOAD_TIMEOUT_MS);
       const signal = shutdownSignal ? AbortSignal.any([shutdownSignal, deadline]) : deadline;
       signal.throwIfAborted();

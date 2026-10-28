@@ -1,4 +1,5 @@
-// Resolves the Sentry DSN for each component from the process environment.
+// The installation privacy policy gates both components before environment
+// variables can select a Sentry DSN.
 //
 // Precedence: a specific variable always wins for its own component.
 // `SENTRY_DSN` supplies a component that has no specific value set.
@@ -8,6 +9,8 @@
 // To add a DSN for a new component, add a field to `SentryDsns`, add a
 // variable named with the shared `SENTRY_DSN_` prefix, and resolve it with
 // `normalize` the same way `frontend` and `backend` resolve here.
+
+import { EXTERNAL_DIAGNOSTICS_ENABLED } from "@paperclipai/shared/privacy-policy";
 
 export interface SentryDsns {
   frontend: string | null;
@@ -20,6 +23,9 @@ function normalize(value: string | undefined): string | null {
 }
 
 export function resolveSentryDsns(env: NodeJS.ProcessEnv = process.env): SentryDsns {
+  if (!EXTERNAL_DIAGNOSTICS_ENABLED) {
+    return { frontend: null, backend: null, legacyFallbackUsed: false };
+  }
   const legacy = normalize(env.SENTRY_DSN);
   const specificFrontend = normalize(env.SENTRY_DSN_FRONTEND);
   const specificBackend = normalize(env.SENTRY_DSN_BACKEND);

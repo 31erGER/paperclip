@@ -1,7 +1,8 @@
 // Optional OpenTelemetry auto-instrumentation for HTTP / Express / PG / …
 //
-// Activated only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. When unset, no
-// OTel packages are loaded at all.
+// Activated only when the installation privacy policy allows external
+// diagnostics and `OTEL_EXPORTER_OTLP_ENDPOINT` is set. Otherwise no OTel
+// packages are loaded by this module.
 //
 // The imports are dynamic and the packages are treated as optional runtime
 // dependencies — self-hosters who want tracing install them explicitly.
@@ -35,11 +36,12 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { EXTERNAL_DIAGNOSTICS_ENABLED } from "@paperclipai/shared/privacy-policy";
 import { checkExactPeerVersions } from "./peer-version-check.js";
 
 export { checkExactPeerVersions } from "./peer-version-check.js";
 
-const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim();
+const endpoint = EXTERNAL_DIAGNOSTICS_ENABLED ? process.env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim() : undefined;
 
 let sdkShutdown: (() => Promise<void>) | null = null;
 let shutdownPromise: Promise<void> | null = null;
@@ -96,7 +98,7 @@ let tracerApiLoadFailed = false;
  * local no-op tracer (fail open).
  */
 export function getStartupTracer(name = "paperclip.startup"): StartupTracerHandle {
-  if (!process.env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim()) return NOOP_TRACER;
+  if (!EXTERNAL_DIAGNOSTICS_ENABLED || !process.env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim()) return NOOP_TRACER;
   try {
     const require = createRequire(import.meta.url);
     const api = require("@opentelemetry/api") as {
@@ -152,7 +154,7 @@ let traceContextApiLoadFailed = false;
  * local no-op trace context (fail open).
  */
 export function getStartupTraceContext(name = "paperclip.startup"): StartupTraceContextHandle {
-  if (!process.env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim()) return NOOP_TRACE_CONTEXT;
+  if (!EXTERNAL_DIAGNOSTICS_ENABLED || !process.env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim()) return NOOP_TRACE_CONTEXT;
   try {
     const require = createRequire(import.meta.url);
     const api = require("@opentelemetry/api") as {
@@ -206,6 +208,7 @@ export interface ParsedTraceparent {
  * context, or when the span context is invalid.
  */
 export function traceparentFromContextToken(contextToken: unknown): string | undefined {
+  if (!EXTERNAL_DIAGNOSTICS_ENABLED) return undefined;
   if (contextToken === undefined || contextToken === null) return undefined;
   try {
     const require = createRequire(import.meta.url);
@@ -245,6 +248,7 @@ export function recordProviderPluginSpan(input: {
   /** The optional span end time as an epoch-millisecond number. */
   endTimeMs?: number;
 }): void {
+  if (!EXTERNAL_DIAGNOSTICS_ENABLED) return;
   try {
     const require = createRequire(import.meta.url);
     const api = require("@opentelemetry/api") as {
