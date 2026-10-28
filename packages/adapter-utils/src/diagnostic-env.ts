@@ -15,6 +15,12 @@ const DIAGNOSTIC_OPT_OUT_ENV = {
   ENABLE_BETA_TRACING_DETAILED: "0",
 } as const;
 
+/** These exact launch-control values are public, not diagnostic secrets. */
+export function isChildRuntimePrivacySetting(key: string, value: string): boolean {
+  const normalized = key.toUpperCase() as keyof typeof DIAGNOSTIC_OPT_OUT_ENV;
+  return Object.hasOwn(DIAGNOSTIC_OPT_OUT_ENV, normalized) && DIAGNOSTIC_OPT_OUT_ENV[normalized] === value;
+}
+
 /** Apply after environment merges, including explicit adapter settings. */
 export function applyChildRuntimePrivacyEnv(env: Record<string, string>): Record<string, string>;
 export function applyChildRuntimePrivacyEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv;

@@ -1,4 +1,5 @@
 import { redactDiagnosticText, REDACTED_COMMAND_TEXT_VALUE } from "../command-redaction.js";
+import { isChildRuntimePrivacySetting } from "../diagnostic-env.js";
 import type { AdapterExecutionResult } from "../types.js";
 
 export interface AcpxTerminalSessionFailure {
@@ -59,12 +60,12 @@ export function sanitizeTerminalSessionFailure(
   configuredEnv: Record<string, unknown> = {},
 ): AcpxTerminalSessionFailureDiagnostic {
   const secrets = Object.entries(env)
-    .filter(([key, value]) => value && !PUBLIC_ENV_KEYS.has(key.toUpperCase()) && !isPublicBooleanSetting(key, value))
+    .filter(([key, value]) => value && !PUBLIC_ENV_KEYS.has(key.toUpperCase()) && !isPublicBooleanSetting(key, value) && !isChildRuntimePrivacySetting(key, value))
     .map(([, value]) => value);
   // Configured values can be resolved secret_refs under arbitrary names (for
   // example DATABASE_URL). Key-name heuristics cannot establish they are public.
   for (const [key, value] of Object.entries(configuredEnv)) {
-    if (typeof value === "string" && value && !isPublicBooleanSetting(key, value)) secrets.push(value);
+    if (typeof value === "string" && value && !isPublicBooleanSetting(key, value) && !isChildRuntimePrivacySetting(key, value)) secrets.push(value);
   }
   // A provider may echo just the password from a configured connection URL.
   for (const value of Object.values(env)) {

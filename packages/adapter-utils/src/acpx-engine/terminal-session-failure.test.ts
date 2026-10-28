@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { classifyToolDefinitionFailure, formatTerminalSessionFailure, sanitizeTerminalSessionFailure } from "./terminal-session-failure.js";
+import { applyChildRuntimePrivacyEnv } from "../diagnostic-env.js";
 
 describe("terminal session failure diagnostics", () => {
   it.each([
@@ -101,6 +102,19 @@ describe("terminal session failure diagnostics", () => {
       OPENCODE_ALLOW_ALL_MODELS: "1",
     }, undefined, { OPENCODE_ALLOW_ALL_MODELS: "1" });
     expect(diagnostic.details).toBe(details);
+  });
+
+  it("preserves local diagnostics with privacy opt-outs while still redacting credentials", () => {
+    const title = "Session limit resets at 4:30pm; retry 1; exporter none; disabled true";
+    const env = applyChildRuntimePrivacyEnv({ PROVIDER_SETTING: "credential-canary" });
+    const diagnostic = sanitizeTerminalSessionFailure({ category: "limit", title, details: "request_id=req_123 credential-canary" }, env);
+    expect(diagnostic.title).toBe(title);
+    expect(diagnostic.details).toBe("request_id=req_123 ***REDACTED***");
+    // Only the exact public value is exempt: arbitrary values under a familiar
+    // key and short secrets under unknown keys remain private.
+    expect(sanitizeTerminalSessionFailure({ category: "access", details: "custom-canary retries=1" }, {
+      DISABLE_TELEMETRY: "custom-canary", PROVIDER_SETTING: "1",
+    }).details).toBe("***REDACTED*** retries=***REDACTED***");
   });
 
   it("redacts short credentials even inside words, paths and punctuated strings", () => {

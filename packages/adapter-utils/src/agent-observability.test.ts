@@ -46,7 +46,7 @@ it("redacts legacy Codex launch headers and preserves literal percent sequences"
   }, otelConfig: { exporter: { "otlp-http": { headers: {} } } } };
   const exporter = launch.otelConfig!.exporter as { "otlp-http": { headers: Record<string, string> } };
   expect(exporter["otlp-http"].headers).toEqual({});
-  for (const key of ["OTEL_EXPORTER_OTLP_LOGS_HEADERS", "OTEL_EXPORTER_OTLP_TRACES_HEADERS"]) {
+  for (const key of ["OTEL_EXPORTER_OTLP_LOGS_HEADERS", "OTEL_EXPORTER_OTLP_TRACES_HEADERS"] as const) {
     expect(launch.environment[key]).toBe(`authorization=${encodeURIComponent(original)}`);
   }
   expect(JSON.stringify(launch.otelConfig)).not.toContain(original);
