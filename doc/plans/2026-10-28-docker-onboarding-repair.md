@@ -62,15 +62,17 @@ Files: `Dockerfile`, `doc/DOCKER.md`, `doc/connections/AI-CONNECTIONS.md`, narro
 - [x] Verify the official pinned Pi package already used by this repo and the official Hermes distribution/install contract.
 - [x] Add the missing local CLI distributions to the image's build-time tool layer, preserving updates and privacy gates; use an isolated environment for Python dependencies.
 - [x] Verify CLI entrypoints/versions as the runtime user in an isolated container. Check the local inference URL instructions for Docker Desktop and Linux host reachability. Both CLIs exit successfully as `node` with networking disabled in the tool-stage image; final production verification is still pending.
-- [ ] Document exact build/ref and persistence instructions so a rebuilt fork image is distinguishable from an original/old image. Commit/push after verification.
+- [x] Document exact build/ref and persistence instructions so a rebuilt fork image is distinguishable from an original/old image. Published in `47611efd4` / `5501b91db`.
 
 ## Task4: Integrated verification and review
 
-- [ ] Exercise the built UI journey with representative authenticated/private fixture APIs, or the isolated source container if the full build is available. Record whether APIs/providers are real or simulated.
-- [ ] Run `pnpm check:privacy`, relevant typechecks/build, and map validation after updating affected map entries.
-- [ ] Attempt the required full checks; preserve existing Runner checksum, Windows shell/runner and token-gate failures. Do not weaken checks to hide them.
+- [x] Exercise the built UI journey with representative authenticated/private fixture APIs, or the isolated source container if the full build is available. Complete isolated signup/claim, provider choice, saved LM Studio routing and real Hermes/Pi CLI hello checks passed against a simulated host model; no real model/subscription claim.
+- [x] Run `pnpm check:privacy`, relevant typechecks/build, and map validation after updating affected map entries. 98 privacy tests passed at that checkpoint; later model discovery extends the suite to 116.
+- [x] Attempt the required full checks; preserve existing Runner checksum, Windows shell/runner and token-gate failures. Do not weaken checks to hide them. See the recorded Windows failures below.
 - [x] Obtain one independent final review; repair actionable findings with red/green evidence. Independent read-only review found no actionable issue; production-image acceptance remains a separate required check.
-- [ ] Update this plan's results, commit/push and verify clean status plus remote HEAD.
+- [x] Update this plan's results and publish verification. Implementation commits
+  `037e05124`, `47611efd4`, `5501b91db` and `b77ac7e63` are pushed to the fork;
+  the model-discovery follow-up records final container cleanup below.
 
 ## Execution record
 
@@ -88,10 +90,28 @@ Files: `Dockerfile`, `doc/DOCKER.md`, `doc/connections/AI-CONNECTIONS.md`, narro
 - [x] Complete affected suites/typecheck/build: 216 tests passed across the three
   complete UI suites; UI typecheck/build and maps pass. Token gates retain their
   106 existing violations. Independent read-only review found no actionable issue.
-- [ ] Complete real browser verification; commit/push the follow-up and keep
-  the user's current volume/session secrets.
-- [ ] Remove only the isolated build/test resources after verification; the
+- [x] Complete real browser verification; commit/push the follow-up and keep
+  the user's current volume/session secrets. `b77ac7e63`; the separate real browser
+  journey passed signup/claim, both local CLIs, single-agent finalization, second
+  account denial, logout and signing in as a different account. Matching UI was
+  deployed on the existing port 3100 container without replacing data/secrets.
+- [x] Remove only the isolated build/test resources after verification; the
   laptop instance on port 3100 now contains a real user account and must remain.
+  Builder/cache, disposable port 3101 data, redundant CLI test image and owned
+  model fixtures were removed. The temporary QA admin role/session was retired
+  after checking the human operator's admin role. See the 2026-10-29 plan.
+
+### Final production acceptance (2026-10-29)
+
+The `5501b91db` production image completed Rust, UI, server, runtime-bundle and
+provider-pack verification. Its first export command was interrupted after the
+image had registered; a repeated exact-source cached build completed with exit
+zero. Digest: `sha256:4722d15b8d237fad88456e1845ba6432d0d68d90665ecfb87efa44e1d0e44697`.
+The final image and both real local CLIs were exercised as the runtime user.
+The separate real browser journey passed; earlier failure records above are
+historical and remain preserved. Full native Windows checks still have the
+documented platform/tooling blockers. The 2026-10-29 model-discovery plan records
+the later application overlay, preserving deployment and final cleanup.
 
 ### Earlier investigation and verification
 

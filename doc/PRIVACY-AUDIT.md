@@ -148,6 +148,14 @@ Tests use isolated fixtures/local embedded databases, not production data.
   including explicit Hermes shared-metrics opt-out and exact Docker-host
   routing/rejection cases. Wizard/provider/routing verification passed 267
   cases. These suites overlap and must not be added as unique coverage.
+- Local model discovery (2026-10-29): 21 files / 116 privacy tests passed.
+  Service/setup/wizard coverage passed 224 cases, and a real Linux HTTP/database
+  authorization regression passed separately. An isolated browser journey proved
+  two local model choices, only the checked model persisted, and real Hermes/Pi
+  CLI probes against a simulated host model. The existing laptop deployment also
+  returned the model list without creating a connection. This is no claim of
+  real LM Studio inference. See the dated local-model-discovery plan for limits,
+  retained failures and cleanup of temporary administrator/test resources.
 - Core telemetry/update regressions: 8 files, 47 tests passed.
 - Server diagnostic/legacy transport regressions: 12 files passed, 145 tests
   passed; 1 file / 18 tests skipped by their existing conditions. The separate
