@@ -1,6 +1,7 @@
-import type { AiConnectionList, AiConnectionUsage, CreateAiConnection, AiConnectionLoginIntent, LocalAiLoginAttempt, LocalAiLoginStatus } from "@paperclipai/shared";
+import type { AiConnectionList, AiConnectionUsage, CreateAiConnection, AiConnectionLoginIntent, LocalAiLoginAttempt, LocalAiLoginStatus, DiscoverLocalAiModels, LocalAiModelDiscovery } from "@paperclipai/shared";
 import { api } from "./client";
 export const aiConnectionsApi = {
+  discoverModels: (companyId: string, input: DiscoverLocalAiModels, signal?: AbortSignal) => api.post<LocalAiModelDiscovery>(`/companies/${companyId}/ai-connections/discover-models`, input, { signal }),
   loginSetup: (companyId: string, sessionId: string) => api.get<{ sessionId: string; intent: AiConnectionLoginIntent; environmentId: string; status: string; connectionId: string | null; grantId: string | null }>(`/companies/${companyId}/ai-connections/login/${encodeURIComponent(sessionId)}/setup`),
   probeUsage: (companyId: string, connectionId: string, grantId?: string) => api.get<AiConnectionUsage>(`/companies/${companyId}/ai-connections/${connectionId}/usage${grantId ? `?grantId=${encodeURIComponent(grantId)}` : ""}`),
   startLocalLogin: (companyId: string, input: AiConnectionLoginIntent & { restart?: boolean }) => api.post<LocalAiLoginAttempt>(`/companies/${companyId}/ai-connections/local/attempts`, input),

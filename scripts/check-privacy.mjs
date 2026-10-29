@@ -17,6 +17,7 @@ const files = [
   "server/src/__tests__/external-diagnostics-policy.test.ts",
   "server/src/__tests__/agent-observability-policy.test.ts",
   "server/src/__tests__/ai-provider-routing.test.ts",
+  "server/src/__tests__/ai-model-discovery.test.ts",
   "server/src/__tests__/diagnostic-exports-policy.test.ts",
   "server/src/__tests__/feedback-policy.test.ts",
   "server/src/__tests__/instance-settings-privacy-policy.test.ts",

@@ -24,7 +24,8 @@ Storybook's simulated controllers and page annotations do not run in the app.
 On a self-hosted instance, the first-agent model step offers **Hermes** and **Pi**
 with a **Local model** label. Select either, then **Connect LM Studio**. The form
 defaults to `http://localhost:1234/v1`, Chat Completions, and no authentication.
-Enter the model ID displayed by LM Studio, save the connection, select the model,
+Click **Test connection and load models**, expand **Choose models**, and check the
+models to make available. Save the connection, select the model,
 and press **Connect** to test the selected CLI/model before finishing setup.
 An API key is optional when LM Studio server authentication is enabled.
 
@@ -38,6 +39,25 @@ Local endpoint URLs accept loopback addresses and the exact Docker host alias
 runs in Docker and LM Studio runs on its host. Arbitrary LAN/public hosts and
 lookalike domain suffixes remain rejected; local routing never falls back to a
 cloud provider. See [Docker setup](../DOCKER.md#31erger-fork-local-agent-onboarding).
+
+The explicit test sends a company-authorized POST to
+`/api/companies/:companyId/ai-connections/discover-models`; the server requests
+`GET <Provider URL>/models` (normally `/v1/models`). It returns only model IDs and
+optional labels. No inference runs and no connection or credentials are saved
+until **Save connection**. Only checked models are saved. **Enter model IDs
+manually** remains available for servers without a model-list endpoint. Changing
+the URL or authentication clears the old list and selection. Listing confirms
+reachability, not chat/tool compatibility; the agent's **Connect** check remains.
+
+Discovery accepts only the existing local endpoint aliases, no authentication or
+an explicitly entered bearer key, and Chat Completions/Responses routing. It is
+unavailable on Cloud or an untrusted public server host. Existing company,
+connection-creation, viewer and board-only permission checks apply. Requests
+have a ten-second deadline, a 1 MiB response limit and a 200-model limit. Redirects
+are rejected; upstream response bodies and inherited credentials are never
+returned or forwarded. Nothing polls in the background. LM Studio's visible
+model list can include downloaded models when just-in-time loading is enabled.
+See [LM Studio's model-list contract](https://lmstudio.ai/docs/developer/openai-compat/models).
 
 Hermes and Pi are agent runtimes; LM Studio supplies inference. The connection
 uses the existing company-scoped access controls and disposable provider home.

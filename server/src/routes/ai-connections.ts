@@ -1,8 +1,10 @@
 import { connectionManagementGuard, connectionRequestActor, connectionRequestContext, connectionRequestUserId, aiLoginUserAction, filterConnectionManagementRows } from "./connection-management-authz.js";
 import { connectionManagementService } from "../services/connection-management.js";
 import { validateAiApiKey } from "../services/ai-api-key-test.js";
+import { discoverLocalAiModels } from "../services/ai-model-discovery.js";
 export { validateAiApiKey } from "../services/ai-api-key-test.js";
 import { supportsLocalAiLogin } from "../services/local-ai-login-policy.js";
+import { isCloudManagedInstance } from "../services/cloud-instance.js";
 import { localAiLoginService } from "../services/local-ai-login.js";
 import { z } from "zod";
 import { Router, type Request } from "express";
@@ -17,6 +19,7 @@ import {
 } from "@paperclipai/db";
 import {
   createAiConnectionSchema,
+  discoverLocalAiModelsSchema,
   aiConnectionLoginIntentSchema,
   localAiConnectionSchema,
   localAiLoginStartSchema,
@@ -155,6 +158,17 @@ export function aiConnectionRoutes(db: Db, options: Parameters<typeof supportsLo
   const service = aiConnectionService(db);
   const localLogin = localAiLoginService(db);
   const pools = aiConnectionRouterService(db);
+  router.post("/companies/:companyId/ai-connections/discover-models",
+    (req, _res, next) => { assertBoard(req); assertCompanyAccess(req, req.params.companyId as string); next(); },
+    validate(discoverLocalAiModelsSchema),
+    managementGuard("connections:configure", "POST /companies/:companyId/ai-connections/discover-models", { personal: true }),
+    async (req, res) => {
+      const companyId = req.params.companyId as string;
+      await assertAiConnectionCreateAccess(db, req, companyId, { ownership: "personal", allAgents: false, agentIds: [] });
+      if (isCloudManagedInstance() || !supportsLocalAiLogin(options)) throw forbidden("Local model discovery is unavailable on this server host. Use a trusted local instance.", { code: "local_ai_model_discovery_unavailable" });
+      res.setHeader("Cache-Control", "no-store");
+      res.json(await discoverLocalAiModels(req.body));
+    });
   router.get("/companies/:companyId/ai-connection-pools", managementGuard("connections:read", "GET /companies/:companyId/ai-connection-pools", { personal: true }), async (req, res) => {
     const companyId = req.params.companyId as string;
     assertBoardOrAgent(req); assertCompanyAccess(req, companyId);

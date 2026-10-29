@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Network, Monitor } from "lucide-react";
 import {
@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AiConnectionCredentialStep } from "./AiConnectionCredentialStep";
+import { LocalModelDiscovery } from "./LocalModelDiscovery";
 
 const providers = [
   {
@@ -117,9 +118,11 @@ export function AiProviderSetup({
   const [region, setRegion] = useState(
     reconnect?.routing?.region ?? "us-east-1",
   );
-  const [models, setModels] = useState(
-    reconnect?.routing?.models.map((m) => m.id).join(", ") ?? "",
+  const [models, setModels] = useState<string[]>(
+    reconnect?.routing?.models.map((m) => m.id) ?? [],
   );
+  const [modelIdsText, setModelIdsText] = useState(reconnect?.routing?.models.map(model => model.id).join(", ") ?? "");
+  const selectModels = useCallback((ids: string[]) => { setModels(ids); setModelIdsText(ids.join(", ")); }, []);
   const [apiKey, setApiKey] = useState("");
   const client = useQueryClient();
   const accounts = useQuery({
@@ -183,11 +186,7 @@ export function AiProviderSetup({
             : provider === "gateway" || provider === "local"
               ? { baseUrl }
               : {}),
-          models: models
-            .split(",")
-            .map((id) => id.trim())
-            .filter(Boolean)
-            .map((id) => ({ id })),
+          models: models.map((id) => ({ id })),
         });
       return aiConnectionsApi.create(
         companyId,
@@ -246,8 +245,11 @@ export function AiProviderSetup({
       Model IDs (comma separated)
       <Input
         aria-label="Model IDs"
-        value={models}
-        onChange={(e) => setModels(e.target.value)}
+        value={modelIdsText}
+        onChange={(e) => {
+          setModelIdsText(e.target.value);
+          setModels([...new Set(e.target.value.split(",").map(id => id.trim()).filter(Boolean))]);
+        }}
         disabled={Boolean(reconnect)}
       />
       <span className="block">
@@ -430,7 +432,11 @@ export function AiProviderSetup({
               </label>
             )
           }
-          {provider === "local" ? modelSettings : reconnect && <details><summary className="cursor-pointer text-sm text-muted-foreground">Model settings</summary>{modelSettings}</details>}
+          {provider === "local" ? !reconnect && ["chat", "responses"].includes(protocol)
+            ? <LocalModelDiscovery companyId={companyId} baseUrl={baseUrl} protocol={protocol} auth={auth} apiKey={apiKey}
+              selected={models} onChange={selectModels} manual={modelSettings} />
+            : modelSettings
+            : reconnect && <details><summary className="cursor-pointer text-sm text-muted-foreground">Model settings</summary>{modelSettings}</details>}
           <p className="text-xs text-muted-foreground">
             Test the connection with your chosen model in the agent’s execution
             environment after connecting.

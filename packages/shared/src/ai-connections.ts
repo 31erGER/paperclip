@@ -1,6 +1,22 @@
 import { z } from "zod";
 import { aiProviderRoutingSchema, aiRoutingHarness, isAiRoutingCompatible, type AiProviderRouting } from "./ai-provider-routing.js";
 
+/** Explicit metadata probe before saving a local OpenAI-compatible account. */
+export const discoverLocalAiModelsSchema = z.object({
+  ownership: z.literal("personal").default("personal"),
+  routing: aiProviderRoutingSchema.refine(route => route.kind === "local"
+    && ["chat", "responses"].includes(route.protocol) && ["none", "bearer"].includes(route.auth),
+  { message: "Model discovery requires a local OpenAI-compatible endpoint." }),
+  apiKey: z.string().trim().min(1).max(32768).optional(),
+}).strict().superRefine((input, ctx) => {
+  if (input.routing.auth === "bearer" && !input.apiKey) ctx.addIssue({ code: "custom", path: ["apiKey"], message: "Enter the endpoint API key." });
+  if (input.routing.auth === "none" && input.apiKey) ctx.addIssue({ code: "custom", path: ["apiKey"], message: "No-auth discovery cannot send a credential." });
+});
+export type DiscoverLocalAiModels = z.infer<typeof discoverLocalAiModelsSchema>;
+export interface LocalAiModelDiscovery {
+  models: Array<{ id: string; label?: string }>;
+}
+
 /** Runtime authentication is a separate transport, never a tool or channel. */
 export const connectionPurposeTransportSchema = z.discriminatedUnion(
   "connectionPurpose",

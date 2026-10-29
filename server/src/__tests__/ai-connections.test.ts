@@ -40,6 +40,7 @@ import { openRouterClaudeHeaders } from "@paperclipai/shared/openrouter-attribut
 import express from "express";
 import request from "supertest";
 import { aiConnectionRoutes, canInstallSharedAiConnectionForNewAgent, responsibleUserForAiRequest } from "../routes/ai-connections.js";
+import { errorHandler } from "../middleware/error-handler.js";
 import { validateAiApiKey } from "../routes/ai-connections.js";
 import * as copilotProbe from "../services/copilot-connection-probe.js";
 import * as settingsModule from "../services/instance-settings.js";
@@ -2039,6 +2040,42 @@ console.log(JSON.stringify({ type: "result", subtype: "success", result: "hello"
     await expect(completeSetupTokenAiConnection(db, { scope: { companyId, ownerUserId: "alice", environmentId: environment.id, adapterType: "claude_local", aiConnection: { ...intent, agentIds: [] } }, token: "fixture-never-save", sessionId })).rejects.toThrow("no longer active");
     expect((await service.list(companyId, "alice")).some(account => account.name === "Expired")).toBe(false);
   });
+  it("authorizes local model discovery before HTTP calls and does not create an account", async () => {
+    const app = express();
+    app.use(express.json());
+    app.use((req, _res, next) => {
+      req.actor = req.headers["x-test-agent"] === "yes"
+        ? { type: "agent", source: "api_key", agentId, companyId }
+        : { type: "board", source: "session", userId: "alice", companyIds: [companyId], memberships: [{ companyId, membershipRole: req.headers["x-test-role"] === "viewer" ? "viewer" : "member", status: "active" }] };
+      next();
+    });
+    app.use("/api", aiConnectionRoutes(db));
+    app.use(errorHandler);
+    const payload = { routing: { kind: "local", protocol: "chat", auth: "none", baseUrl: "http://127.0.0.1:1234/v1", models: [] } };
+    const network = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response(JSON.stringify({ data: [{ id: "local-model" }] })));
+    const before = (await service.list(companyId, "alice")).length;
+    try {
+      const url = `/api/companies/${companyId}/ai-connections/discover-models`;
+      expect((await request(app).post(url.replace(companyId, otherCompanyId)).send(payload)).status).toBe(403);
+      expect((await request(app).post(url).set("x-test-role", "viewer").send(payload)).status).toBe(403);
+      expect((await request(app).post(url).set("x-test-agent", "yes").send(payload)).status).toBe(403);
+      expect((await request(app).post(url).send({ routing: { ...payload.routing, baseUrl: "https://public.example/v1" } })).status).toBe(400);
+      expect((await request(app).post(url).send({ ...payload, ownership: "shared" })).status).toBe(400);
+      const publicApp = express();
+      publicApp.use(express.json(), (req, _res, next) => { req.actor = { type: "board", source: "session", userId: "alice", companyIds: [companyId], memberships: [{ companyId, membershipRole: "member", status: "active" }] }; next(); });
+      publicApp.use("/api", aiConnectionRoutes(db, { deploymentMode: "authenticated", deploymentExposure: "public" }));
+      publicApp.use(errorHandler);
+      expect((await request(publicApp).post(url).send(payload)).status).toBe(403);
+      expect(network).not.toHaveBeenCalled();
+      const response = await request(app).post(url).send(payload);
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ models: [{ id: "local-model" }] });
+      expect(response.headers["cache-control"]).toBe("no-store");
+      expect(network).toHaveBeenCalledOnce();
+      expect((await service.list(companyId, "alice")).length).toBe(before);
+    } finally { network.mockRestore(); }
+  });
+
   it("authorizes account creation, reconnect and defaults at the HTTP boundary before provider calls", async () => {
     const app = express();
     app.use(express.json());

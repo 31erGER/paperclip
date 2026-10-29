@@ -9,8 +9,10 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { aiProviderSetupPreset } from "@paperclipai/shared";
 import type { AiConnectionCredentialStep } from "./AiConnectionCredentialStep";
 
+vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+
 let credentialProps: ComponentProps<typeof AiConnectionCredentialStep> | undefined;
-vi.mock("@/api/ai-connections", () => ({ aiConnectionsApi: { create: vi.fn(async () => ({ connectionId: "connection", grantId: "grant" })), list: vi.fn(async () => ({ currentUserId: "owner", connections: [], canManageConnections: true })) } }));
+vi.mock("@/api/ai-connections", () => ({ aiConnectionsApi: { discoverModels: vi.fn(), create: vi.fn(async () => ({ connectionId: "connection", grantId: "grant" })), list: vi.fn(async () => ({ currentUserId: "owner", connections: [], canManageConnections: true })) } }));
 vi.mock("@/api/agents", () => ({ agentsApi: { list: vi.fn(async () => []) } }));
 vi.mock("./AiConnectionCredentialStep", () => ({ AiConnectionCredentialStep: (props: ComponentProps<typeof AiConnectionCredentialStep>) => { credentialProps = props; return <div>Existing credential flow</div>; } }));
 
@@ -33,6 +35,91 @@ it("reconnects an older OpenRouter account without adding routing metadata", asy
 });
 
 const providerSources = ["openrouter", "bedrock", "responses-api", "messages-api", "chat-completions-api", "local"];
+
+async function localDiscoveryForm() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+  client.setQueryData(["ai-connections", "company", undefined], { canManageConnections: true, connections: [] });
+  client.setQueryData(["agents", "company", "provider-access"], []);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => root.render(<QueryClientProvider client={client}><TooltipProvider><AiProviderSetup companyId="company" initialProvider="local" initialProtocol="chat" providerLabel="LM Studio" onCancel={() => {}} onComplete={() => {}} /></TooltipProvider></QueryClientProvider>));
+  return { container, async close() { await act(async () => root.unmount()); container.remove(); client.clear(); } };
+}
+function discoverButton(container: HTMLElement) {
+  return [...container.querySelectorAll("button")].find(button => button.textContent === "Test connection and load models");
+}
+
+it("fetches local models only on request and saves checked opaque IDs", async () => {
+  vi.mocked(aiConnectionsApi.discoverModels).mockReset().mockResolvedValue({ models: [{ id: "model-a" }, { id: "model-b,opaque", label: "Model B" }] });
+  vi.mocked(aiConnectionsApi.create).mockClear();
+  const form = await localDiscoveryForm();
+  try {
+    expect(aiConnectionsApi.discoverModels).not.toHaveBeenCalled();
+    expect(discoverButton(form.container)).toBeTruthy();
+    await act(async () => discoverButton(form.container)!.click());
+    await vi.waitFor(() => expect(form.container.querySelector('[role="checkbox"][aria-label="model-b,opaque"]')).not.toBeNull());
+    expect(aiConnectionsApi.discoverModels).toHaveBeenCalledWith("company", expect.objectContaining({ routing: expect.objectContaining({ kind: "local", baseUrl: "http://localhost:1234/v1", auth: "none" }) }), expect.any(AbortSignal));
+    await act(async () => (form.container.querySelector('[role="checkbox"][aria-label="model-b,opaque"]') as HTMLButtonElement).click());
+    await act(async () => form.container.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    expect(aiConnectionsApi.create).toHaveBeenCalledWith("company", expect.objectContaining({ routing: expect.objectContaining({ models: [{ id: "model-b,opaque" }] }) }));
+  } finally { await form.close(); }
+});
+
+it("ignores and cancels a model list when the provider URL changes", async () => {
+  let finish!: (value: { models: Array<{ id: string }> }) => void;
+  vi.mocked(aiConnectionsApi.discoverModels).mockReset().mockReturnValue(new Promise(resolve => { finish = resolve; }));
+  const form = await localDiscoveryForm();
+  try {
+    expect(discoverButton(form.container)).toBeTruthy();
+    await act(async () => discoverButton(form.container)!.click());
+    const signal = vi.mocked(aiConnectionsApi.discoverModels).mock.calls[0][2]!;
+    const url = form.container.querySelector('[aria-label="Provider URL"]') as HTMLInputElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(url, "http://localhost:4321/v1");
+      url.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(signal.aborted).toBe(true);
+    await act(async () => finish({ models: [{ id: "stale-model" }] }));
+    expect(form.container.textContent).not.toContain("stale-model");
+    expect(form.container.querySelector('[role="checkbox"]')).toBeNull();
+  } finally { await form.close(); }
+});
+
+it("preserves unfinished separators while typing manual model IDs", async () => {
+  const form = await localDiscoveryForm();
+  try {
+    const models = form.container.querySelector('[aria-label="Model IDs"]') as HTMLInputElement;
+    for (const raw of ["first-model", "first-model,", "first-model, s", "first-model, second-model"]) {
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(models, raw);
+        models.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      expect(models.value).toBe(raw);
+    }
+  } finally { await form.close(); }
+});
+
+it("shows discovery errors, retries empty lists, and retains manual model entry", async () => {
+  vi.mocked(aiConnectionsApi.discoverModels).mockReset().mockRejectedValueOnce(new Error("Local endpoint unavailable")).mockResolvedValue({ models: [] });
+  vi.mocked(aiConnectionsApi.create).mockClear();
+  const form = await localDiscoveryForm();
+  try {
+    expect(discoverButton(form.container)).toBeTruthy();
+    await act(async () => discoverButton(form.container)!.click());
+    await vi.waitFor(() => expect(form.container.querySelector('[role="alert"]')?.textContent).toContain("Local endpoint unavailable"));
+    expect(aiConnectionsApi.create).not.toHaveBeenCalled();
+    await act(async () => discoverButton(form.container)!.click());
+    await vi.waitFor(() => expect(form.container.textContent).toContain("No models were returned"));
+    const models = form.container.querySelector('[aria-label="Model IDs"]') as HTMLInputElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(models, "manual-one, manual-two");
+      models.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => form.container.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    expect(aiConnectionsApi.create).toHaveBeenCalledWith("company", expect.objectContaining({ routing: expect.objectContaining({ models: [{ id: "manual-one" }, { id: "manual-two" }] }) }));
+  } finally { await form.close(); }
+});
 it("saves LM Studio with a loopback endpoint and no API key", async () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   client.setQueryData(["ai-connections", "company", undefined], { canManageConnections: true, connections: [] });

@@ -2,6 +2,17 @@
 
 Product map: [Onboarding and first work](../feature-map/onboarding.md).
 
+Local model discovery (2026-10-29):
+`POST /api/companies/{companyId}/ai-connections/discover-models` is board-only,
+company-scoped and uses existing connection-creation/management authorization.
+Viewers, agents, foreign companies, Cloud and untrusted public server hosts cannot
+probe the host. The unsaved personal connection schema accepts local aliases
+only. The explicit request lists models without inference, persistence or new
+grants. The real HTTP/database regression verifies ordinary member success and
+viewer/agent/foreign-company/public-host denial; the bounded service suite covers
+redirects, malformed responses and local URL rejection. These checks do not
+qualify the remainder of onboarding's agent operations below.
+
 Feature ID: `onboarding`.
 
 Review date: 2026-10-12. Source commit: `f981fa3cc10cb8663a87dec60345fbff46d54d0a`.

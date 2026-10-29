@@ -63,6 +63,18 @@ it also disables the updater.
 
 ## Functions that must remain
 
+The LM Studio wizard's **Test connection and load models** is an explicit local
+metadata request, not a background upload. Its implementation is
+`server/src/services/ai-model-discovery.ts`, authorized in
+`server/src/routes/ai-connections.ts` and triggered only by
+`ui/src/components/ai-connections/LocalModelDiscovery.tsx`. It sends
+`GET <local provider URL>/models`, optionally with the key entered for that
+endpoint. It never inherits credentials, follows redirects, saves a connection,
+or calls inference during discovery. Only IDs/labels return to the browser;
+upstream error bodies are suppressed. To hide this optional control later,
+remove the `LocalModelDiscovery` branch in `AiProviderSetup.tsx` and retain its
+manual model-ID field; saved connections and agent execution are independent.
+
 - Local database records: task/run history, audit entries, recovery state and
   plugin metrics. They support control-plane correctness and stay in the instance.
 - Agent Internet tools, model inference, OAuth and explicitly configured

@@ -42,8 +42,11 @@ The fork image includes their pinned CLIs; host LM Studio is reachable through
 the exact `host.docker.internal` local endpoint alias. Claude/Codex credential
 switching survives delayed setup restoration. Copilot uses its token connection
 and does not display a subscription switch. See [Docker setup](../../doc/DOCKER.md#31erger-fork-local-agent-onboarding).
-Use **Connect LM Studio** to save a loopback Chat Completions endpoint (default
-`http://localhost:1234/v1`, no authentication), select its model, then test and
+Use **Connect LM Studio**, enter the local endpoint (default
+`http://localhost:1234/v1`, no authentication), and **Test connection and load models**.
+Expand the checkbox list and select the available models to save; manual IDs
+remain an optional fallback. In Docker, use the exact `host.docker.internal`
+alias for an inference server on the host. Select a saved model, then test and
 finish. This path selects the local execution environment and CLI adapter; the
 CLI and LM Studio server must already be available on that host. See
 [local setup](../../doc/connections/AI-CONNECTIONS.md#local-first-company-setup-with-lm-studio).
