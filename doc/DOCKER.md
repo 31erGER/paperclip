@@ -28,6 +28,13 @@ onboarding method is its token connection; no subscription toggle is offered
 for that choice. A delayed setup response must not replace a newly chosen
 Claude/Codex authentication method.
 
+Each self-hosted instance stores its own users and permissions in its data
+volume. Registering the same email on another computer creates a separate
+account there. On an already claimed instance, an existing administrator must
+invite that user to an organization or grant the intended instance role.
+The **No organization access** page offers **Sign out and use another account**;
+logout clears the session and account caches without changing permissions.
+
 For LM Studio running on the Docker host, enter
 `http://host.docker.internal:1234/v1`. `localhost` inside Paperclip means the
 container itself. The local routing validator accepts this exact Docker alias

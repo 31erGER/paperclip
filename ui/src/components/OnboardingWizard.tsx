@@ -1353,7 +1353,8 @@ function OnboardingWizardInner({
       setSetupAgentId(id);
       return agentsApi.create(companyId, {
       setupId: id, name: agentName.trim() || AGENT_ROLE_LABELS[agentRole], appearance: agentAppearance,
-      role: agentRole, adapterType: createAdapter, runner,
+      // Resolve the placeholder's own runner before the user chooses a source.
+      role: agentRole, adapterType: createAdapter, runner: sourceSelected ? runner : "auto",
       adapterConfig: createAdapter === "paperclip_runner" ? { provider: "acpx", acpxAgent: "copilot" } : {},
       metadata: { setupAdapterPending: !sourceSelected },
       onboardingFirstAgent: true, runtimeConfig: buildNewAgentRuntimeConfig({ heartbeatEnabled: false }),

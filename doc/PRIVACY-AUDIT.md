@@ -129,9 +129,13 @@ without conflicting with existing gates. After every upstream merge:
 Target: this source checkout on native Windows, Node 24.16.0, pnpm 9.15.4.
 Tests use isolated fixtures/local embedded databases, not production data.
 
-- Final `pnpm check:privacy`: 19 files, 75 tests passed with the actual closed
+- Initial audit `pnpm check:privacy`: 19 files, 75 tests passed with the actual closed
   production flags. The wrapper was invoked with the cached pinned pnpm in
   offline mode; the check itself uses installed Node/Vitest and no installer.
+- Docker/onboarding follow-up (2026-10-28): 20 files / 98 privacy tests passed,
+  including explicit Hermes shared-metrics opt-out and exact Docker-host
+  routing/rejection cases. Wizard/provider/routing verification passed 267
+  cases. These suites overlap and must not be added as unique coverage.
 - Core telemetry/update regressions: 8 files, 47 tests passed.
 - Server diagnostic/legacy transport regressions: 12 files passed, 145 tests
   passed; 1 file / 18 tests skipped by their existing conditions. The separate

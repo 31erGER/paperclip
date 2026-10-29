@@ -26,6 +26,9 @@ API: `present` — representative operation IDs:
 
 Agent access: `restricted` — Agent authenticates with its own issued bearer; board login
 uses human/client auth.
+Signed-in humans without board access can use the existing session logout
+from the access-denied screen. This UI recovery grants neither company
+membership nor instance-admin authority and changes no agent endpoint.
 
 Policy: Company access plus action-specific grants; instance administration requires a
 board administrator.

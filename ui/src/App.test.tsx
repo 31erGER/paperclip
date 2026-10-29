@@ -15,7 +15,10 @@ const mockHealthApi = vi.hoisted(() => ({
 
 const mockAuthApi = vi.hoisted(() => ({
   getSession: vi.fn(),
+  signOut: vi.fn(),
 }));
+const navigateTopLevelMock = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/browserNavigation", () => ({ navigateTopLevel: navigateTopLevelMock }));
 
 const mockAccessApi = vi.hoisted(() => ({
   getCurrentBoardAccess: vi.fn(),
@@ -98,6 +101,7 @@ describe("CloudAccessGate", () => {
       deploymentExposure: "private",
       bootstrapStatus: "ready",
     });
+    mockAuthApi.signOut.mockResolvedValue({ success: true });
   });
 
   afterEach(() => {
@@ -163,6 +167,58 @@ describe("CloudAccessGate", () => {
     expect(container.textContent).toContain("No organization access");
     expect(container.textContent).not.toContain("Outlet content");
 
+    unmountRoot(root);
+  });
+
+  it("lets a signed-in nonmember sign out and clears their account data", async () => {
+    mockAuthApi.getSession.mockResolvedValue({ user: { id: "nonmember" } });
+    mockAccessApi.getCurrentBoardAccess.mockResolvedValue({ isInstanceAdmin: false, companyIds: [] });
+    mockAuthApi.signOut.mockImplementationOnce(async () => {
+      mockAuthApi.getSession.mockResolvedValue(null);
+      return { success: true };
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(["private-account-data"], { previousAccount: true });
+    const root = renderGate(container, false, client);
+    await waitForText(container, "No organization access");
+    const button = [...container.querySelectorAll("button")].find(button => button.textContent === "Sign out and use another account");
+    expect(button).toBeTruthy();
+    flushSync(() => button!.click());
+    await vi.waitFor(() => expect(mockAuthApi.signOut).toHaveBeenCalledOnce());
+    await waitForText(container, "Navigate:/auth?next=");
+    expect(client.getQueryData(["private-account-data"])).toBeUndefined();
+    expect(container.textContent).not.toContain("Outlet content");
+    unmountRoot(root);
+  });
+
+  it("keeps a failed nonmember sign-out actionable without granting access", async () => {
+    mockAuthApi.getSession.mockResolvedValue({ user: { id: "nonmember" } });
+    mockAccessApi.getCurrentBoardAccess.mockResolvedValue({ isInstanceAdmin: false, companyIds: [] });
+    mockAuthApi.signOut.mockRejectedValueOnce(new Error("Sign-out request failed"));
+    const root = renderGate(container);
+    await waitForText(container, "No organization access");
+    const button = [...container.querySelectorAll("button")].find(button => button.textContent === "Sign out and use another account");
+    expect(button).toBeTruthy();
+    flushSync(() => button!.click());
+    await waitForText(container, "Sign-out request failed");
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+    expect(button!.disabled).toBe(false);
+    expect(container.textContent).not.toContain("Outlet content");
+    expect(container.textContent).not.toContain("Navigate:/auth");
+    unmountRoot(root);
+  });
+
+  it("uses the existing Cloud logout for a signed-in nonmember", async () => {
+    mockHealthApi.get.mockResolvedValue({ deploymentMode: "authenticated", bootstrapStatus: "ready", cloud: { managed: true, managedBy: "paperclip-cloud", cloudBaseUrl: "https://my.paperclip.app", stackSlug: "team" } });
+    mockAuthApi.getSession.mockResolvedValue({ user: { id: "nonmember" } });
+    mockAccessApi.getCurrentBoardAccess.mockResolvedValue({ isInstanceAdmin: false, companyIds: [] });
+    const root = renderGate(container);
+    await waitForText(container, "No organization access");
+    const button = [...container.querySelectorAll("button")].find(button => button.textContent === "Sign out and use another account");
+    expect(button).toBeTruthy();
+    flushSync(() => button!.click());
+    await vi.waitFor(() => expect(navigateTopLevelMock).toHaveBeenCalledWith("/cloud/logout"));
+    expect(mockAuthApi.signOut).not.toHaveBeenCalled();
     unmountRoot(root);
   });
 

@@ -74,6 +74,27 @@ Files: `Dockerfile`, `doc/DOCKER.md`, `doc/connections/AI-CONNECTIONS.md`, narro
 
 ## Execution record
 
+### Follow-up: local account access and completed setup (2026-10-29)
+
+- [x] Identify the signed-in account and restore only the human operator's
+  intended access through the existing admin API. The browser-test administrator
+  had already claimed this laptop instance; the later human signup had no role.
+  Verified the targeted promotion without deleting accounts or changing passwords.
+- [x] Reproduce missing logout on **No organization access** (three red cases:
+  self-hosted logout/cache reset, failed logout, existing Cloud logout).
+- [x] Add the existing `useSignOut` hook to that page; preserve permission gates.
+- [x] Reproduce a saved native runner leaking into the neutral process setup
+  placeholder; resolve the placeholder with `auto` before a source is selected.
+- [x] Complete affected suites/typecheck/build: 216 tests passed across the three
+  complete UI suites; UI typecheck/build and maps pass. Token gates retain their
+  106 existing violations. Independent read-only review found no actionable issue.
+- [ ] Complete real browser verification; commit/push the follow-up and keep
+  the user's current volume/session secrets.
+- [ ] Remove only the isolated build/test resources after verification; the
+  laptop instance on port 3100 now contains a real user account and must remain.
+
+### Earlier investigation and verification
+
 - User confirmed the affected container is on another PC and explicitly authorized building/starting an isolated instance here. The other PC's memory failure has no known phase/error yet.
 - Baseline adapter suite: 7 passed. New source/method cases: 8 passed after reproducing and fixing the Copilot no-op and delayed method overwrite. The current source offers Hermes/Pi in both private auth modes.
 - Broader wizard/provider run: 233 passed; one newly added policy assertion read before React's query notification committed. Waiting for the actual DOM policy state corrected that assertion; all 8 new cases then passed. Retain both logs.

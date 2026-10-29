@@ -14,6 +14,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CloudSignIn } from "@/components/CloudSignIn";
 import { clearCloudSignInAttempt } from "@/lib/cloud-sign-in";
+import { useSignOut } from "@/hooks/useSignOut";
 
 const RECONNECT_INTERVAL_MS = 5_000;
 
@@ -49,6 +50,7 @@ export function CloudAccessError({
 }
 
 function NoBoardAccessPage() {
+  const signOut = useSignOut();
   return (
     <div className="mx-auto max-w-xl py-10">
       <Card className="block p-6">
@@ -60,6 +62,12 @@ function NoBoardAccessPage() {
         <p className="mt-2 text-sm text-muted-foreground">
           Use an organization invite or sign in with an account that already belongs to this org.
         </p>
+        <Button className="mt-4" variant="outline" disabled={signOut.isPending} onClick={() => signOut.mutate()}>
+          {signOut.isPending ? "Signing out…" : "Sign out and use another account"}
+        </Button>
+        {signOut.isError && <p role="alert" className="mt-3 text-sm text-destructive">
+          {signOut.error instanceof Error ? signOut.error.message : "Could not sign out. Try again."}
+        </p>}
       </Card>
     </div>
   );

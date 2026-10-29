@@ -2723,6 +2723,21 @@ describe("OnboardingWizard restore-gate (stale localStorage across accounts)", (
       await act(async () => root.unmount());
     });
 
+    it("keeps a saved native runner out of the neutral setup placeholder", async () => {
+      const unavailable = "Paperclip Runner is unavailable for this harness and environment. Select Legacy runner in Advanced.";
+      mockAgentsApi.create.mockImplementation(async (_company, input) => {
+        if (input.adapterType === "process" && input.runner === "paperclip") throw new Error(unavailable);
+        return { ...input, id: input.setupId, pauseReason: "setup" };
+      });
+      const { root } = await openStep4({ runner: "paperclip" });
+      expect(document.body.textContent).not.toContain(unavailable);
+      expect(mockAgentsApi.create).toHaveBeenCalledTimes(1);
+      expect(mockAgentsApi.create.mock.calls[0][1]).toMatchObject({ adapterType: "process", runner: "auto" });
+      await pickSource(/OpenAI/);
+      expect(mockAgentsApi.update).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ adapterType: "codex_local", runner: "auto" }), "company-new");
+      await act(async () => root.unmount());
+    });
+
     it("saves a provisional enabled provider when process is disabled without choosing its tile", async () => {
       mockAdapterRegistry.disabled = new Set(["process"]);
       const { root } = await openStep4();

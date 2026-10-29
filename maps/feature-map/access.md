@@ -46,6 +46,10 @@ Preconditions: follow the [baseline](./README.md#before-driving-a-journey). For 
 Automated: [auth UI](../../ui/src/pages/Auth.test.tsx) and [session routes](../../server/src/__tests__/auth-session-route.test.ts) cover their respective layers.
 
 Manual: Sign in, reload a company deep link, sign out, and revisit it. Confirm the browser requests authentication rather than showing cached company data. Test an invalid claim separately on disposable state.
+Also register a user without organization membership on an already claimed
+instance: the access-denied screen must offer **Sign out and use another
+account**, clear account caches on success, and retain an actionable error if
+logout fails. Self-hosted logout stays local; Cloud uses its existing logout.
 
 ### `invite-members`
 
