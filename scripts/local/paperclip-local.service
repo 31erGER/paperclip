@@ -1,0 +1,26 @@
+# systemd user unit for the Paperclip local harness (fork 31erGER).
+#
+# Install (adjust the path if the checkout lives elsewhere):
+#   mkdir -p ~/.config/systemd/user
+#   cp scripts/local/paperclip-local.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now paperclip-local
+#   loginctl enable-linger "$USER"   # keep running after logout
+#
+# Logs: journalctl --user -u paperclip-local -f
+[Unit]
+Description=Paperclip local harness
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/dev/paperclip-local
+ExecStart=/usr/bin/env bash %h/dev/paperclip-local/scripts/local/paperclip-local.sh start
+Restart=on-failure
+RestartSec=5
+# Agents spawn CLIs (pi, claude, codex) found on this PATH. The start script
+# also loads nvm, which adds the Node bin directory (and npm -g tools like pi).
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=default.target

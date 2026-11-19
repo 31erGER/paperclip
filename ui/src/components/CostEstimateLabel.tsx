@@ -1,12 +1,14 @@
 import type { CostByAgent } from "@paperclipai/shared";
 import { Badge } from "./ui/badge";
+import { useShowCostMetrics } from "@/hooks/useDeploymentProfile";
 
 /** Use this group's ledger counts, never the page-wide estimate count. */
 export function CostEstimateLabel({
   eventCount,
   estimatedEventCount,
 }: Partial<Pick<CostByAgent, "eventCount" | "estimatedEventCount">>) {
-  if (!estimatedEventCount) return null;
+  const showCostMetrics = useShowCostMetrics();
+  if (!estimatedEventCount || !showCostMetrics) return null;
   const allEstimated = estimatedEventCount === eventCount;
   return (
     <Badge

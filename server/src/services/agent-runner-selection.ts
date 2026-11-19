@@ -9,6 +9,7 @@ import { forbidden, unprocessable } from "../errors.js";
 import { runSshCommand } from "@paperclipai/adapter-utils/ssh";
 import { parseEnvironmentDriverConfig, resolveEnvironmentDriverConfigForRuntime } from "./environment-config.js";
 import { localAgentRunnerTarget } from "../lib/agent-runner-platform.js";
+import { isLocalProfileActive } from "../lib/deployment-profile.js";
 import { normalizeClaudeRunnerOptions, type AgentConfigurationWarning } from "@paperclipai/shared";
 
 export type RunnerTarget = {
@@ -38,6 +39,8 @@ function runnerAdaptersAvailable(harness: string, driver: string): boolean {
 }
 
 export function agentRunnerAvailability(harness: string, target: RunnerTarget = localAgentRunnerTarget()): AgentRunnerAvailability {
+  // Local deployment profiles run every agent as a host process.
+  if (isLocalProfileActive()) return { supportedRunners: ["legacy"], defaultRunner: "legacy" };
   if (target.runnerTasks) {
     // The plugin provisions the host and launches its own pinned Runner, so
     // Core has no platform to qualify. Legacy adapters cannot run on a plugin
@@ -146,6 +149,13 @@ export function resolveNewAgentRunner(input: AgentRunnerSelection): { adapterTyp
 }
 
 function resolveAgentRunner(input: AgentRunnerSelection): { adapterType: string; adapterConfig: Record<string, unknown> } {
+  if (isLocalProfileActive()) {
+    if (input.runner === "paperclip") {
+      throw unprocessable("Paperclip Runner is disabled by the local deployment profile. Select Legacy runner.", { code: "agent_runner_unavailable" });
+    }
+    // Translate saved or imported native configurations to their host adapter.
+    if (input.adapterType === "paperclip_runner") input = { ...input, runner: "legacy" };
+  }
   const adapterType = input.adapterType ?? "process";
   let config = { ...input.adapterConfig };
   const harness = agentHarnessType(adapterType, config);

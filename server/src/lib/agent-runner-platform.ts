@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { paperclipRunnerSupportsPlatform } from "@paperclipai/shared";
+import { isLocalProfileActive } from "./deployment-profile.js";
 
 type LocalRunnerTarget = {
   driver: "local";
@@ -37,6 +38,9 @@ export function localAgentRunnerTarget(): LocalRunnerTarget {
 }
 
 export function localPaperclipRunnerSupported(): boolean {
+  // Local deployment profiles never use Paperclip Runner (no Rust binary,
+  // no runnerd); agents always run as host processes.
+  if (isLocalProfileActive()) return false;
   const target = localAgentRunnerTarget();
   return paperclipRunnerSupportsPlatform("codex_local", target.platform, target.architecture, target.libc, target.glibcVersion);
 }

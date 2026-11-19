@@ -76,6 +76,8 @@ import {
 } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { AGENT_DEFAULT_MAX_CONCURRENT_RUNS } from "@paperclipai/shared";
+import { createInstanceRunSlots } from "./instance-run-slots.js";
+import { resolveDeploymentProfile } from "../../lib/deployment-profile.js";
 import {
   agents,
   caseHandoffs,
@@ -191,7 +193,7 @@ export interface HeartbeatQueueDependencies extends Pick<HeartbeatRetryDependenc
   issuesSvc: Pick<ReturnType<typeof issueService>, "getDependencyReadiness" | "listDependencyReadiness">;
   treeControlSvc: Pick<ReturnType<typeof issueTreeControlService>, "getActivePauseHoldGate">;
   budgets: Pick<ReturnType<typeof budgetService>, "getInvocationBlock">;
-  instanceSettings: Pick<ReturnType<typeof instanceSettingsService>, "getExperimental">;
+  instanceSettings: Pick<ReturnType<typeof instanceSettingsService>, "getExperimental" | "getGeneral">;
   runDispatch: Pick<ReturnType<typeof createRunDispatch>, "cancelStaleQueuedRun">;
   wakeQueue: Pick<ReturnType<typeof createWakeQueue>, "createAdmissionTransactionScope" | "admitWakeBehindIssueExecution">;
   activeRunExecutions: Set<string>;
@@ -396,6 +398,10 @@ export function createHeartbeatQueue(db: Db, dependencies: HeartbeatQueueDepende
     runTaskKey,
     filterZombieCoalesceTarget,
   } = dependencies;
+  const instanceRunSlots = createInstanceRunSlots(db, {
+    getGeneral: () => instanceSettings.getGeneral(),
+    deploymentProfile: resolveDeploymentProfile(),
+  });
 
   function parseHeartbeatPolicy(agent: typeof agents.$inferSelect) {
     const runtimeConfig = parseObject(agent.runtimeConfig);
@@ -1908,6 +1914,16 @@ export function createHeartbeatQueue(db: Db, dependencies: HeartbeatQueueDepende
       });
     }
 
+    await startQueuedRunsInArrivalOrder(cutoff);
+  }
+
+  /**
+   * Visit agents with queued runs, oldest queued run first, so a freed
+   * instance slot goes to the work that has waited longest across agents and
+   * companies. Stops early once the instance-wide limit is reached.
+   */
+  async function startQueuedRunsInArrivalOrder(cutoff?: Awaited<ReturnType<typeof getWorktreeExecutionCutoff>>) {
+    const effectiveCutoff = cutoff === undefined ? await getWorktreeExecutionCutoff() : cutoff;
     const queuedRuns = await db
       .select({ agentId: heartbeatRuns.agentId })
       .from(heartbeatRuns)
@@ -1916,14 +1932,28 @@ export function createHeartbeatQueue(db: Db, dependencies: HeartbeatQueueDepende
         and(
           eq(heartbeatRuns.status, "queued"),
           eq(companies.status, "active"),
-          cutoff ? gte(heartbeatRuns.createdAt, cutoff) : undefined,
+          effectiveCutoff ? gte(heartbeatRuns.createdAt, effectiveCutoff) : undefined,
         ),
-      );
+      )
+      .orderBy(asc(heartbeatRuns.createdAt));
 
     const agentIds = [...new Set(queuedRuns.map((r) => r.agentId))];
+    const instanceLimit = await instanceRunSlots.resolveLimit();
     for (const agentId of agentIds) {
+      if (instanceLimit !== null && (await instanceRunSlots.countRunningRuns()) >= instanceLimit) break;
       await startNextQueuedRunForAgent(agentId);
     }
+  }
+
+  /**
+   * Called when a run frees its slot. Upstream promotes only the same agent's
+   * queue. With an instance-wide limit (fork 31erGER) the freed slot may
+   * belong to another agent's queued run, so the arrival-order sweep follows.
+   */
+  async function startNextQueuedRunsAfterRunSettled(agentId: string) {
+    const started = await startNextQueuedRunForAgent(agentId);
+    if ((await instanceRunSlots.resolveLimit()) !== null) await startQueuedRunsInArrivalOrder();
+    return started;
   }
 
   // A 403 from claimQueuedRun comes from the run's own persisted identity
@@ -1991,6 +2021,11 @@ export function createHeartbeatQueue(db: Db, dependencies: HeartbeatQueueDepende
         policy.maxConcurrentRuns - runningCount,
       );
       if (availableSlots <= 0) return [];
+      // Instance-wide run limit (fork 31erGER): skip the queue scan while every
+      // instance slot is busy. The authoritative check runs under the
+      // admission lock below.
+      const instanceLimit = await instanceRunSlots.resolveLimit();
+      if (instanceLimit !== null && (await instanceRunSlots.countRunningRuns()) >= instanceLimit) return [];
 
       const queuedRuns = await db
         .select()
@@ -2079,9 +2114,11 @@ export function createHeartbeatQueue(db: Db, dependencies: HeartbeatQueueDepende
         return left.createdAt.getTime() - right.createdAt.getTime();
       });
 
+      const claimedRuns = await instanceRunSlots.withAdmission(async (freeInstanceSlots) => {
+      const claimSlots = Math.min(availableSlots, freeInstanceSlots);
       const claimedRuns: Array<typeof heartbeatRuns.$inferSelect> = [];
       for (const queuedRun of prioritizedRuns) {
-        if (claimedRuns.length >= availableSlots) break;
+        if (claimedRuns.length >= claimSlots) break;
         let claimed: typeof heartbeatRuns.$inferSelect | null;
         try {
           claimed = await claimQueuedRun(queuedRun, companyAgents, deferredPostCommitEffects);
@@ -2099,6 +2136,8 @@ export function createHeartbeatQueue(db: Db, dependencies: HeartbeatQueueDepende
         }
         if (claimed) claimedRuns.push(claimed);
       }
+      return claimedRuns;
+      });
       if (claimedRuns.length === 0) return [];
 
       for (const claimedRun of claimedRuns) {
@@ -4930,6 +4969,7 @@ export function createHeartbeatQueue(db: Db, dependencies: HeartbeatQueueDepende
     enqueueWakeup,
     dispatchPendingNativeStatusWakeups,
     startNextQueuedRunForAgent,
+    startNextQueuedRunsAfterRunSettled,
     countRunningRunsForAgent,
     releaseRunClaimedJustBeforeSuppression,
     claimQueuedRun,

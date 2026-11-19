@@ -49,8 +49,10 @@ import { PluginSlotOutlet } from "@/plugins/slots";
 import { PluginLauncherOutlet } from "@/plugins/launchers";
 import { SidebarCompanyMenu } from "./SidebarCompanyMenu";
 import { primarySidebarStyles } from "./primary-sidebar-styles";
+import { useShowCostMetrics } from "@/hooks/useDeploymentProfile";
 
 export function Sidebar({ children }: { children?: ReactNode }) {
+  const showCostMetrics = useShowCostMetrics();
   const { openNewIssue } = useDialogActions();
   const { enabled: agentChatEnabled } = useAgentChatEnabled();
   // Every labeled section is collapsible (session-scoped, default open) —
@@ -292,7 +294,7 @@ export function Sidebar({ children }: { children?: ReactNode }) {
               <SidebarNavItem to="/org" label="Org" icon={Network} />
               <SidebarNavItem to="/apps" label="Connectors" icon={Unplug} />
               <SidebarNavItem to="/timeline" label="Timeline" icon={GanttChartSquare} />
-              <SidebarNavItem to="/costs" label="Costs" icon={DollarSign} />
+              {showCostMetrics ? <SidebarNavItem to="/costs" label="Costs" icon={DollarSign} /> : null}
               <SidebarNavItem to="/activity" label="Activity" icon={History} />
               <SidebarNavItem to="/activity/commentary" label="Commentary" icon={History} />
               <SidebarNavItem to="/company/settings" label="Settings" icon={Settings} />

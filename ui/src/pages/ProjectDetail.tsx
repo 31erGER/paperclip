@@ -46,6 +46,7 @@ import {
   useResourceMembershipMutation,
   useResourceMemberships,
 } from "../hooks/useResourceMemberships";
+import { useShowCostMetrics } from "@/hooks/useDeploymentProfile";
 
 /* ── Top-level tab types ── */
 
@@ -325,6 +326,7 @@ function ProjectPluginOperationsList({
 /* ── Main project page ── */
 
 export function ProjectDetail() {
+  const showCostMetrics = useShowCostMetrics();
   const { companyPrefix, projectId, filter } = useParams<{
     companyPrefix?: string;
     projectId: string;
@@ -851,7 +853,7 @@ export function ProjectDetail() {
             ...(project.managedByPlugin ? [{ value: "plugin-operations", label: "Plugin operations" }] : []),
             ...(showWorkspacesTab ? [{ value: "workspaces", label: "Workspaces" }] : []),
             { value: "configuration", label: "Configuration" },
-            { value: "budget", label: "Budget" },
+            ...(showCostMetrics ? [{ value: "budget", label: "Budget" }] : []),
             ...pluginTabItems.map((item) => ({
               value: item.value,
               label: item.label,

@@ -49,6 +49,8 @@ export type HealthStatus = {
    * settings-visibility registry). Absent when nothing is hidden.
    */
   hiddenSettings?: string[];
+  /** Fork 31erGER: operator-selected deployment profile. */
+  deploymentProfile?: "standard" | "local" | "local_only";
 };
 
 export const healthApi = {

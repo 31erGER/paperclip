@@ -2825,6 +2825,18 @@ export * from "./agent-avatar-upload.js";
 
 export type { DotBinding, DotInvitation, DotConnection, DotPairing } from "./dot-invitations.js";
 export { agentHarnessType, agentRuntimeSettingsHarness, agentRunner, paperclipRunnerProfileForHarness, paperclipRunnerSupportsPlatform, PAPERCLIP_RUNNER_MINIMUM_GLIBC_VERSION, type AgentRunnerChoice, type AgentRunner, type AgentRunnerAvailability } from "./agent-runner.js";
+export {
+  DEPLOYMENT_PROFILES,
+  DEPLOYMENT_PROFILE_ENV,
+  LOCAL_ONLY_DEFAULT_MAX_CONCURRENT_AGENT_RUNS,
+  LOCAL_PROFILE_DISABLED_EXPERIMENTAL_FLAGS,
+  MAX_CONCURRENT_AGENT_RUNS_LIMIT,
+  effectiveMaxConcurrentAgentRuns,
+  hidesCostMetrics,
+  isLocalDeploymentProfile,
+  parseDeploymentProfile,
+  type DeploymentProfile,
+} from "./deployment-profile.js";
 export { normalizeClaudeRunnerOptions, type AgentConfigurationWarning } from "./runner-configuration-warnings.js";
 export { EXTERNAL_AGENT_TOOL_GUIDANCE, DOT_AGENT_TOOL_GUIDANCE, GROK_BOT_AGENT_TOOL_GUIDANCE } from "./external-agent-guidance.js";
 

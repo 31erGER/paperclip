@@ -3,6 +3,7 @@ import type { CostByAgent } from "@paperclipai/shared";
 import { formatCents } from "../lib/utils";
 import { CostEstimateLabel } from "./CostEstimateLabel";
 import { Badge } from "./ui/badge";
+import { useShowCostMetrics } from "@/hooks/useDeploymentProfile";
 
 export function CostAmount({
   costCents,
@@ -16,6 +17,8 @@ export function CostAmount({
   showUnavailableCount?: boolean;
   suffix?: ReactNode;
 }) {
+  const showCostMetrics = useShowCostMetrics();
+  if (!showCostMetrics) return null;
   const entirelyUnpriced = costCents === 0 && (eventCount ?? 0) > 0 && unpricedEventCount === eventCount;
   return (
     <div className="flex flex-col items-end gap-1 text-right">

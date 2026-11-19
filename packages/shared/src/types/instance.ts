@@ -37,6 +37,13 @@ export interface InstanceGeneralSettings {
    * Kubernetes sandbox provider and denies local/ssh execution.
    */
   executionMode?: InstanceExecutionMode;
+  /**
+   * Instance-wide limit of agent runs that may execute at the same time
+   * (fork 31erGER). Further runs stay queued until a slot is free. Absent or
+   * `null` = unlimited, except under the `local_only` deployment profile,
+   * which defaults to 1 so a single local model server is never overloaded.
+   */
+  maxConcurrentAgentRuns?: number | null;
 }
 
 export interface InstanceExperimentalSettings {

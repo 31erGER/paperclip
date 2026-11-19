@@ -27,6 +27,7 @@ import {
   agentScopedAuditHref,
   type AgentLocalDetailView,
 } from "@/pages/agent-detail-navigation";
+import { useShowCostMetrics } from "@/hooks/useDeploymentProfile";
 
 const localIcons = {
   overview: Sparkles,
@@ -59,6 +60,7 @@ export function AgentContextualSidebar({
   agentName?: string;
   labels?: Partial<Record<AgentLocalDetailView, string>>;
 }) {
+  const showCostMetrics = useShowCostMetrics();
   const { selectedCompanyId } = useCompany();
   const shouldResolveAgent = !agentId || !agentName;
   const { data: resolvedAgent } = useQuery({
@@ -126,7 +128,7 @@ export function AgentContextualSidebar({
             Audit
           </p>
           <div data-slot="contextual-sidebar-group" className={contextualSidebarStyles.group}>
-            {resolvedId ? auditItems.map((item) => (
+            {resolvedId ? auditItems.filter((item) => showCostMetrics || (item.section !== "costs" && item.section !== "budgets")).map((item) => (
               <SidebarNavItem
                 key={item.section}
                 to={agentScopedAuditHref(resolvedId, item.section)}

@@ -1412,7 +1412,8 @@ export function heartbeatService(
     appendRunEvent,
     finalizeAgentStatus,
     timerClaimWasFirstHeartbeat,
-    startNextQueuedRunForAgent,
+    // Fork 31erGER: a stopped run frees an instance-wide slot too.
+    startNextQueuedRunForAgent: (agentId: string) => heartbeatQueue.startNextQueuedRunsAfterRunSettled(agentId),
     setRunStatus,
   });
 
@@ -3941,7 +3942,7 @@ export function heartbeatService(
               logger.warn({ err, runId: run.id }, "failed to deliver settled tool reviews after execution cleanup");
             });
         }
-        await startNextQueuedRunForAgent(run.agentId);
+        await heartbeatQueue.startNextQueuedRunsAfterRunSettled(run.agentId);
       }
     }
   }

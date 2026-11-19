@@ -41,6 +41,7 @@ import { InlineBanner } from "../components/InlineBanner";
 import type { Agent, Issue } from "@paperclipai/shared";
 import { PluginSlotOutlet } from "@/plugins/slots";
 import { SmokeLabDashboardCard } from "../components/SmokeLabDashboardCard";
+import { useShowCostMetrics } from "@/hooks/useDeploymentProfile";
 
 const DASHBOARD_ACTIVITY_LIMIT = 10;
 
@@ -74,6 +75,7 @@ export function derivePausedAgentBanner(agents: Agent[] | undefined): PausedAgen
 }
 
 export function Dashboard() {
+  const showCostMetrics = useShowCostMetrics();
   const designSandbox = useDesignSandbox();
   const { selectedCompanyId, companies } = useCompany();
   const { openOnboarding } = useDialogActions();
@@ -429,7 +431,7 @@ export function Dashboard() {
                 </span>
               }
             />
-            <MetricCard
+            {showCostMetrics ? <MetricCard
               appearance={designSandbox ? "card" : "plain"}
               icon={DollarSign}
               value={formatCents(data.costs.monthSpendCents)}
@@ -442,7 +444,7 @@ export function Dashboard() {
                     : "Unlimited budget"}
                 </span>
               }
-            />
+            /> : null}
             <MetricCard
               appearance={designSandbox ? "card" : "plain"}
               icon={ShieldCheck}

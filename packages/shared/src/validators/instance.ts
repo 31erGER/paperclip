@@ -7,6 +7,7 @@ import {
   DEFAULT_BACKUP_RETENTION,
 } from "../types/instance.js";
 import { feedbackDataSharingPreferenceSchema } from "./feedback.js";
+import { MAX_CONCURRENT_AGENT_RUNS_LIMIT } from "../deployment-profile.js";
 import { shapeWithoutDefaults } from "./partial.js";
 
 function presetSchema<T extends readonly number[]>(presets: T, label: string) {
@@ -31,6 +32,8 @@ export const instanceGeneralSettingsSchema = z.object({
   // Execution policy. Absent/"any" = unrestricted; "kubernetes" forces the
   // Kubernetes sandbox provider and denies local/ssh execution (cloud_tenant).
   executionMode: z.enum(["kubernetes", "any"]).optional(),
+  // Instance-wide run limit (fork 31erGER). null/absent = unlimited.
+  maxConcurrentAgentRuns: z.number().int().min(1).max(MAX_CONCURRENT_AGENT_RUNS_LIMIT).nullable().optional(),
 }).strict();
 
 export const patchInstanceGeneralSettingsSchema = z

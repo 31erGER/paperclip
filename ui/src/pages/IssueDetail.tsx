@@ -384,6 +384,7 @@ import {
   type WorkspaceFileRef,
   workspaceFileRefSchema,
 } from "@paperclipai/shared";
+import { useShowCostMetrics } from "@/hooks/useDeploymentProfile";
 
 // Stable empty array for React Query `data` defaults. A literal `= []` default
 // creates a new array reference on every render while `data` is undefined
@@ -2944,6 +2945,7 @@ function IssueDetailActivityTab({
     (issueTreeCostSummary?.inputTokens ?? 0) +
     (issueTreeCostSummary?.cachedInputTokens ?? 0) +
     (issueTreeCostSummary?.outputTokens ?? 0);
+  const showCostMetrics = useShowCostMetrics();
   const hasIssueTreeCost =
     !!issueTreeCostSummary &&
     (issueTreeCostSummary.costCents > 0 ||
@@ -2975,7 +2977,7 @@ function IssueDetailActivityTab({
             <div className="space-y-1 text-xs text-muted-foreground tabular-nums">
               <div className="flex flex-wrap gap-3">
                 <span className="font-medium text-foreground">This task</span>
-                {issueCostSummary.hasCost ? (
+                {issueCostSummary.hasCost && showCostMetrics ? (
                   <span className="font-medium text-foreground">
                     ${issueCostSummary.cost.toFixed(4)}
                   </span>
@@ -3004,7 +3006,7 @@ function IssueDetailActivityTab({
                 <div className="flex flex-wrap gap-3">
                   <span className="font-medium text-foreground">
                     Including sub-tasks{" "}
-                    {(issueTreeCostSummary.costCents / 100).toLocaleString(
+                    {showCostMetrics && (issueTreeCostSummary.costCents / 100).toLocaleString(
                       undefined,
                       {
                         style: "currency",

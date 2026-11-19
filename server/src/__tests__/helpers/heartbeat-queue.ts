@@ -41,7 +41,10 @@ export function createHeartbeatQueueTestDependencies(db: Db): QueueTestDependenc
     },
     treeControlSvc: { getActivePauseHoldGate: vi.fn(async () => null) },
     budgets: { getInvocationBlock: vi.fn(async () => null) },
-    instanceSettings: { getExperimental: vi.fn<HeartbeatQueueDependencies["instanceSettings"]["getExperimental"]>() },
+    instanceSettings: {
+      getExperimental: vi.fn<HeartbeatQueueDependencies["instanceSettings"]["getExperimental"]>(),
+      getGeneral: vi.fn(async () => ({}) as Awaited<ReturnType<HeartbeatQueueDependencies["instanceSettings"]["getGeneral"]>>),
+    },
     runDispatch: createRunDispatch(db),
     wakeQueue: {
       createAdmissionTransactionScope: vi.fn<ReturnType<typeof createWakeQueue>["createAdmissionTransactionScope"]>(),

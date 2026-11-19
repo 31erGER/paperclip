@@ -2,6 +2,7 @@ import { AgentChats } from "./pages/AgentChats";
 import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import type { ToolConnectionCredentialSource } from "@paperclipai/shared";
 import { Navigate, Outlet, Route, Routes, useActiveCompanyPrefix, useLocation, useParams } from "@/lib/router";
+import { CostMetricsGate } from "./components/CostMetricsGate";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "@/i18n";
 import { Layout } from "./components/Layout";
@@ -374,8 +375,8 @@ function boardRoutes(streamlinedUiEnabled: boolean, combinedInboxTasksEnabled: b
       <Route path="activity" element={streamlinedUiEnabled ? <CompanyActivity /> : <ProductionSurface><ProductionCompanyActivity /></ProductionSurface>} />
       <Route path="activity/commentary" element={<AuditHub section="commentary" />} />
       <Route path="activity/runs" element={<AuditHub section="runs" />} />
-      <Route path="activity/costs" element={<AuditHub section="costs" />} />
-      <Route path="activity/budgets" element={<AuditHub section="budgets" />} />
+      <Route path="activity/costs" element={<CostMetricsGate><AuditHub section="costs" /></CostMetricsGate>} />
+      <Route path="activity/budgets" element={<CostMetricsGate><AuditHub section="budgets" /></CostMetricsGate>} />
       <Route path="activity/timeline" element={<AuditHub section="timeline" />} />
       {streamlinedUiEnabled ? (
         <>
@@ -391,7 +392,7 @@ function boardRoutes(streamlinedUiEnabled: boolean, combinedInboxTasksEnabled: b
         </>
       ) : (
         <>
-          <Route path="costs" element={<Costs />} />
+          <Route path="costs" element={<CostMetricsGate><Costs /></CostMetricsGate>} />
           <Route path="audit" element={<Navigate to="/activity?mode=agents" replace />} />
         </>
       )}

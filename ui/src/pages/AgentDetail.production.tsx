@@ -131,6 +131,7 @@ import {
   useResourceMemberships,
 } from "../hooks/useResourceMemberships";
 import { Badge } from "@/components/ui/badge";
+import { useShowCostMetrics } from "@/hooks/useDeploymentProfile";
 
 const runStatusIcons: Record<string, { icon: typeof CheckCircle2; color: string }> = {
   succeeded: { icon: CheckCircle2, color: "text-green-600 dark:text-green-400" },
@@ -758,6 +759,7 @@ function WorkspaceOperationsSection({
 }
 
 export function AgentDetail() {
+  const showCostMetrics = useShowCostMetrics();
   const { companyPrefix, agentId, tab: urlTab, runId: urlRunId } = useParams<{
     companyPrefix?: string;
     agentId: string;
@@ -1413,7 +1415,7 @@ export function AgentDetail() {
           onValueChange={handleAgentTabChange}
         >
           <PageTabBar
-            items={AGENT_DETAIL_TABS.filter((item) => item.value !== "channels" || chatConnectorsEnabled)}
+            items={AGENT_DETAIL_TABS.filter((item) => (item.value !== "channels" || chatConnectorsEnabled) && (item.value !== "budget" || showCostMetrics))}
             value={activeView}
             onValueChange={handleAgentTabChange}
           />

@@ -38,6 +38,7 @@ import { getManagedInstanceConfig, type ManagedInstanceConfig } from "./managed-
 import { getOperatorSettingDefaults } from "./setting-defaults.js";
 import { isCloudStagingExperimentalSetting, isCloudStagingInstance } from "./cloud-instance.js";
 import { forbidden } from "../errors.js";
+import { applyDeploymentProfileExperimentalOverlay, resolveDeploymentProfile } from "../lib/deployment-profile.js";
 import { EXTERNAL_DIAGNOSTICS_ENABLED } from "@paperclipai/shared/privacy-policy";
 
 const DEFAULT_SINGLETON_KEY = "default";
@@ -212,6 +213,9 @@ function normalizeGeneralSettings(raw: unknown): InstanceGeneralSettings {
       backupRetention: parsed.data.backupRetention ?? DEFAULT_BACKUP_RETENTION,
       // Absent => unrestricted; only carry through an explicit policy.
       ...(parsed.data.executionMode ? { executionMode: parsed.data.executionMode } : {}),
+      ...(typeof parsed.data.maxConcurrentAgentRuns === "number"
+        ? { maxConcurrentAgentRuns: parsed.data.maxConcurrentAgentRuns }
+        : {}),
     };
   }
   return {
@@ -456,6 +460,7 @@ export function instanceSettingsService(db: Db, options: InstanceSettingsService
   // the write path, where a full-GET echo of the overlaid value is stripped
   // back to the schema default (see stripOperatorGeneralEchoes).
   const operatorDefaults = getOperatorSettingDefaults(options.runtimeEnv ?? process.env);
+  const deploymentProfile = resolveDeploymentProfile(options.runtimeEnv ?? process.env);
 
   function toGeneralView(raw: unknown): InstanceGeneralSettings {
     const general = applyOperatorGeneralDefaults(normalizeGeneralSettings(raw), operatorDefaults);
@@ -465,10 +470,12 @@ export function instanceSettingsService(db: Db, options: InstanceSettingsService
   function toExperimentalView(raw: unknown): InstanceExperimentalSettingsWithManaged {
     const stored = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
     const defaults = staging ? { ...managedConfig?.features, ...stored } : raw;
-    const { experimental, managedKeys } = applyManagedExperimentalOverlay(
+    const overlaid = applyManagedExperimentalOverlay(
       applyCloudCatalogDefaults(normalizeExperimentalSettings(defaults), defaults, managedConfig),
       enforcedManagedConfig,
     );
+    const managedKeys = overlaid.managedKeys;
+    const experimental = applyDeploymentProfileExperimentalOverlay(overlaid.experimental, deploymentProfile);
     // Self-hosted responses stay byte-identical: no managedKeys field at all.
     return managedConfig ? { ...experimental, managedKeys } : experimental;
   }

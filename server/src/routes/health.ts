@@ -36,6 +36,7 @@ import {
 } from "../auth/workspace-login-handoff.js";
 import { serverVersion } from "../version.js";
 import { getStartupRecoveryState } from "../startup-recovery-state.js";
+import { resolveDeploymentProfile } from "../lib/deployment-profile.js";
 import { nativeRestartRecoverySummary } from "../services/native-runtime/native-restart-recovery.js";
 import {
   removeHotRestartIntent,
@@ -246,6 +247,8 @@ export function healthRoutes(
     // fuller-detail fetch. Omitted entirely when nothing is hidden, so
     // deployments without the env var keep today's byte-identical responses.
     const hiddenSettings = [...getHiddenSettings(runtimeEnv)];
+    // Fork 31erGER: tell the board which deployment profile is active.
+    const deploymentProfile = resolveDeploymentProfile(runtimeEnv);
     // serverInfo (git SHA + process start) rides on the full-details responses
     // only, so it reaches board/agent actors in authenticated mode or any caller
     // in local_trusted dev — never anonymous authenticated callers. The
@@ -281,14 +284,14 @@ export function healthRoutes(
               commit,
               serverInfo,
               ...(cloud ? { cloud } : {}),
-              ...(hiddenSettings.length ? { hiddenSettings } : {}),
+              ...(hiddenSettings.length ? { hiddenSettings } : {}), ...(deploymentProfile !== "standard" ? { deploymentProfile } : {}),
             }
           : {
               status: healthStatus,
               deploymentMode: opts.deploymentMode,
               commit,
               ...(cloud ? { cloud } : {}),
-              ...(hiddenSettings.length ? { hiddenSettings } : {}),
+              ...(hiddenSettings.length ? { hiddenSettings } : {}), ...(deploymentProfile !== "standard" ? { deploymentProfile } : {}),
             },
       );
       return;
@@ -306,7 +309,7 @@ export function healthRoutes(
         commit,
         warmStandby: true,
         ...(cloud ? { cloud } : {}),
-        ...(hiddenSettings.length ? { hiddenSettings } : {}),
+        ...(hiddenSettings.length ? { hiddenSettings } : {}), ...(deploymentProfile !== "standard" ? { deploymentProfile } : {}),
       });
       return;
     }
@@ -422,7 +425,7 @@ export function healthRoutes(
         // this instance becomes visible.
         ...(workspaceReadiness ? { workspace: workspaceReadiness } : {}),
         ...(cloud ? { cloud } : {}),
-        ...(hiddenSettings.length ? { hiddenSettings } : {}),
+        ...(hiddenSettings.length ? { hiddenSettings } : {}), ...(deploymentProfile !== "standard" ? { deploymentProfile } : {}),
       });
       return;
     }
@@ -449,7 +452,7 @@ export function healthRoutes(
       ...(devServer ? { devServer } : {}),
       ...(workspaceReadiness ? { workspace: workspaceReadiness } : {}),
       ...(cloud ? { cloud } : {}),
-      ...(hiddenSettings.length ? { hiddenSettings } : {}),
+      ...(hiddenSettings.length ? { hiddenSettings } : {}), ...(deploymentProfile !== "standard" ? { deploymentProfile } : {}),
     });
   });
 

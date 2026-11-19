@@ -6,7 +6,9 @@ import {
   WEEKLY_RETENTION_PRESETS,
   MONTHLY_RETENTION_PRESETS,
   DEFAULT_BACKUP_RETENTION,
+  parseDeploymentProfile,
 } from "@paperclipai/shared";
+import { AgentRunQueueSetting } from "@/components/AgentRunQueueSetting";
 import { LogOut, SlidersHorizontal } from "lucide-react";
 import { healthApi } from "@/api/health";
 import { instanceSettingsApi } from "@/api/instanceSettings";
@@ -174,6 +176,13 @@ export function InstanceGeneralSettings({ embedded = false }: { embedded?: boole
         </div>
       </section>
       )}
+
+      <AgentRunQueueSetting
+        configured={generalQuery.data?.maxConcurrentAgentRuns}
+        profile={parseDeploymentProfile(healthQuery.data?.deploymentProfile)}
+        disabled={updateGeneralMutation.isPending || signOutMutation.isPending}
+        onChange={(next) => updateGeneralMutation.mutate({ maxConcurrentAgentRuns: next })}
+      />
 
       {showBackupRetention && (
       <section>
