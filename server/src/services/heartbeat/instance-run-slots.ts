@@ -1,11 +1,7 @@
-import { eq, sql } from "drizzle-orm";
-import type { Db } from "@paperclipai/db";
-import { heartbeatRuns } from "@paperclipai/db";
-import {
-  effectiveMaxConcurrentAgentRuns,
-  type DeploymentProfile,
-  type InstanceGeneralSettings,
-} from "@paperclipai/shared";
+import { and, eq, notInArray, sql } from "drizzle-orm";
+import { heartbeatRuns, instanceSettings, type Db } from "@paperclipai/db";
+import { effectiveMaxConcurrentAgentRuns, type DeploymentProfile } from "@paperclipai/shared";
+import { resolveDeploymentProfile } from "../../lib/deployment-profile.js";
 
 /**
  * Instance-wide run slots (fork 31erGER, local harness).
@@ -15,59 +11,63 @@ import {
  * runs execute at the same time across all companies; the rest stay queued.
  * The per-agent `maxConcurrentRuns` still applies on top of this limit.
  *
- * Ownership: queue admission (`queue.ts`) asks this module for free slots
- * while holding the admission lock below, then claims at most that many runs.
+ * Ownership: `assertAgentRunSlotFree` (run-slot-admission.ts) calls
+ * `assertInstanceRunSlotFree` inside every claim transaction. A full instance
+ * throws `InstanceRunSlotsFull`, which the queue treats like full agent slots
+ * (the run stays queued). `queue.ts` promotes queued runs of any agent when a
+ * run settles (`startNextQueuedRunsAfterRunSettled`).
  */
-export interface InstanceRunSlotsDependencies {
-  getGeneral: () => Promise<Pick<InstanceGeneralSettings, "maxConcurrentAgentRuns">>;
-  deploymentProfile: DeploymentProfile;
+
+/** Advisory lock key that serializes instance-wide slot checks ("pclp" + 1). */
+const INSTANCE_RUN_SLOT_LOCK_KEY = 0x70636c70_01;
+
+type SettingsReader = Pick<Db, "select">;
+
+/** Effective instance-wide limit, or null when unlimited. */
+export async function readInstanceRunLimit(
+  db: SettingsReader,
+  profile: DeploymentProfile = resolveDeploymentProfile(),
+): Promise<number | null> {
+  const [row] = await db
+    .select({ general: instanceSettings.general })
+    .from(instanceSettings)
+    .where(eq(instanceSettings.singletonKey, "default"))
+    .limit(1);
+  const configured = (row?.general as Record<string, unknown> | undefined)?.maxConcurrentAgentRuns;
+  return effectiveMaxConcurrentAgentRuns(typeof configured === "number" ? configured : null, profile);
 }
 
-export function createInstanceRunSlots(db: Db, deps: InstanceRunSlotsDependencies) {
-  // Promise chain used as an in-process mutex. Paperclip runs one server
-  // process per instance, so the slot check and the claim cannot race across
-  // processes.
-  let admissionTail: Promise<void> = Promise.resolve();
-
-  /** Effective limit, or null when unlimited. */
-  async function resolveLimit(): Promise<number | null> {
-    const general = await deps.getGeneral();
-    return effectiveMaxConcurrentAgentRuns(general.maxConcurrentAgentRuns, deps.deploymentProfile);
+export class InstanceRunSlotsFull extends Error {
+  constructor(readonly running: number, readonly limit: number) {
+    super("This instance already runs as many agent runs at once as it allows.");
+    this.name = "InstanceRunSlotsFull";
   }
-
-  async function countRunningRuns(): Promise<number> {
-    const [row] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(heartbeatRuns)
-      .where(eq(heartbeatRuns.status, "running"));
-    return Number(row?.count ?? 0);
-  }
-
-  /**
-   * Run `admit` with the number of free instance slots. Without a limit this
-   * is `Infinity` and no lock is taken (upstream behavior). With a limit, the
-   * slot count and everything `admit` claims happen under one lock, so two
-   * agents cannot both take the last free slot.
-   */
-  async function withAdmission<T>(admit: (freeSlots: number) => Promise<T>): Promise<T> {
-    const limit = await resolveLimit();
-    if (limit === null) return admit(Number.POSITIVE_INFINITY);
-
-    const previous = admissionTail;
-    let release!: () => void;
-    admissionTail = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    await previous;
-    try {
-      const running = await countRunningRuns();
-      return await admit(Math.max(0, limit - running));
-    } finally {
-      release();
-    }
-  }
-
-  return { resolveLimit, countRunningRuns, withAdmission };
 }
 
-export type InstanceRunSlots = ReturnType<typeof createInstanceRunSlots>;
+/**
+ * Throw `InstanceRunSlotsFull` when the instance-wide limit is reached.
+ * Runs inside the claim transaction. The transaction-scoped advisory lock
+ * serializes concurrent claims (also across processes) until commit, so two
+ * agents cannot both take the last free slot.
+ *
+ * `replacedRunIds` are runs the claiming run supersedes (itself, the run it
+ * retries); they do not count as occupying a slot.
+ */
+export async function assertInstanceRunSlotFree(
+  tx: Pick<Db, "select" | "execute">,
+  replacedRunIds: string[],
+  profile: DeploymentProfile = resolveDeploymentProfile(),
+): Promise<void> {
+  const limit = await readInstanceRunLimit(tx, profile);
+  if (limit === null) return;
+  await tx.execute(sql`select pg_advisory_xact_lock(${INSTANCE_RUN_SLOT_LOCK_KEY})`);
+  const [running] = await tx
+    .select({ count: sql<number>`count(*)::int` })
+    .from(heartbeatRuns)
+    .where(and(
+      eq(heartbeatRuns.status, "running"),
+      replacedRunIds.length > 0 ? notInArray(heartbeatRuns.id, replacedRunIds) : undefined,
+    ));
+  const count = Number(running?.count ?? 0);
+  if (count >= limit) throw new InstanceRunSlotsFull(count, limit);
+}

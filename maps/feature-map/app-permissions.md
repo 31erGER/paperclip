@@ -4,7 +4,7 @@ navigation: {"section":"Apps, channels, and extensions","sectionOrder":50,"order
 
 # App access and action permissions
 
-After connecting an app, an operator decides which agents may use it and whether each action is off, requires approval, or is allowed. Activity and action tests help verify the resulting access.
+After connecting an app, an operator or authorized agent decides which agents may use it and whether each action is off, requires approval, or is allowed. Activity and action tests help verify the resulting access.
 
 Feature ID: `app-permissions`.
 
@@ -20,6 +20,13 @@ Agent access: [companion](../agent-access-map/app-permissions.md).
 - `test-action`: `app-permissions/test-action` — choose an actor and inputs and inspect a real action result.
 - `account-maintenance`: `app-permissions/account-maintenance` — inspect accounts, reconnect/revoke, and review connection activity.
 
+Declining an Ask first action declines that invocation. It does not change the
+connection's policy. A later, distinct request from the same responsible person
+can open a new review for the same action and arguments. The agent must obtain
+that new approval before execution. Retries of the declined intent and its
+rejection continuation remain declined. Missing or untrusted human provenance
+does not open another review.
+
 ## How to get to it (user POV)
 
 ### `permissions`
@@ -29,6 +36,13 @@ Open an app at `/apps/:connectionId/permissions`; this is the default connected-
 ### `test-and-maintain`
 
 Use the action test control in Permissions, then the connection’s Activity and available account/advanced controls.
+
+### `delegated-permissions`
+
+Ask an agent to change access or action policy for a named connection through
+the existing APIs. The responsible person's current authority, the agent's
+management grants, resource scope and all affected targets bound the request.
+An explicitly requested, authorized policy change may target that same agent.
 
 ## Driving it
 
@@ -90,6 +104,21 @@ sandbox command execution are destructive, and catalog updates quarantine new or
 changed actions. [Unikraft regressions](../../server/src/__tests__/unikraft-connection.test.ts)
 cover classification, Off policies, revocation and stale contracts with fixture
 provider responses.
+
+### `delegated-permissions`
+
+Automated: [production-authenticated integration](../../server/src/__tests__/connection-management.integration.test.ts)
+covers actual key/JWT policy edits, retained targets, caller/target test policies,
+human approval, scope and revocation using PostgreSQL and provider fixtures.
+
+Manual: Request a bounded access or policy change through an actual agent, reload
+Permissions, and verify the saved audience, action choice and agent audit actor.
+Include an explicitly requested self-targeted policy edit. Repeat with missing
+management grants, an excluded target/resource, and Ask or Plan mode; writes
+must be denied. A denied tool call must not cause an unsolicited policy relaxation.
+An Ask-first action still requires the authorized human's decision; the agent
+cannot approve its own governed action or edit its own principal permissions.
+Verify caller and target policies both apply when testing as another agent.
 
 ## Gotchas
 

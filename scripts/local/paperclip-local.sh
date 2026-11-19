@@ -83,6 +83,11 @@ case "$cmd" in
     # The lockfile may lag behind patch configuration on this fork; allow pnpm
     # to reconcile it instead of failing the install.
     pnpm install --frozen-lockfile || pnpm install --no-frozen-lockfile
+    # The migration safety check compares with the original repository.
+    if ! git remote get-url upstream >/dev/null 2>&1; then
+      git remote add upstream https://github.com/paperclipai/paperclip.git
+    fi
+    git fetch --quiet upstream master || echo "[paperclip-local] could not fetch upstream; migration checks fall back to origin/master" >&2
     mkdir -p "$HOME/.config/paperclip-local"
     if [[ ! -f "$HOME/.config/paperclip-local/env" ]]; then
       cp "$REPO_ROOT/scripts/local/env.example" "$HOME/.config/paperclip-local/env"

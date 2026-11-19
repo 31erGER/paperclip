@@ -4,6 +4,8 @@ Product map: [gateways-profiles](../feature-map/gateways-profiles.md).
 
 Feature ID: `gateways-profiles`.
 
+Delegated native entries inherit the [native admission and work-mode limits](README.md#native-rest-transport).
+
 Review date: 2026-10-26. Source base: `a1f77821b9cd5c9c846fdf7a0fa5cc620ad2b6bb`; implementation: [#17737](https://github.com/paperclipai/paperclip/pull/17737).
 
 Connection operations reviewed in this working tree. The inventory was reconciled
@@ -218,10 +220,19 @@ Review: `operation-reviewed`.
 
 API: `present` — `POST /api/tool-gateway/gateways/{gatewayId}/tokens`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
-Policy: `tools:manage_connections (responsible user: tools:admin)`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Policy: `tools:manage_connections (responsible user: tools:admin)`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user. Agent callers receive token metadata and the Tokens page path only; the token value is generated when the responsible person reveals it.
 Evidence: `verified` — [route](../../server/src/routes/tool-gateway.ts); reviewed in the working tree based on the source commit above. [Authenticated fixtures](../../server/src/__tests__/connection-management.integration.test.ts) passed with database persistence and actual bearer/session middleware.
 Verification: `passed` — deterministic provider fixtures / local assembled server; no live provider qualification.
 Gaps: Provider fixtures do not qualify live provider setup or availability.
+
+### `post-tool-gateway-gateway-tokens-reveal`
+
+API: `present` — `POST /api/tool-gateway/gateway-tokens/{tokenId}/reveal`; JSON REST.
+Agent access: `operator-only` — person-only; agent callers receive 403 `gateway_token_requires_person`.
+Policy: board session with `tools:admin`; only the responsible person of an agent-created token can reveal it, once.
+Evidence: `verified` — [route](../../server/src/routes/tool-gateway.ts); [authenticated fixtures](../../server/src/__tests__/connection-management.integration.test.ts) cover agent denial, one-time reveal, a working revealed value and responsible-person enforcement.
+Verification: `passed` — local assembled server.
+Gaps: No live provider qualification.
 
 ### `post-tool-gateway-gateway-tokens-revoke`
 

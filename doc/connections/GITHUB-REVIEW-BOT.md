@@ -134,6 +134,13 @@ choose an active sponsor, and use the restricted guest profile. Guests receive n
 sponsor credentials. Authority is checked again before tool calls and
 publication, so revocation also affects queued or ongoing work.
 
+The username lookup uses the bot's own GitHub App installation with a short-lived,
+metadata-only token. It does not use a personal account or the shared unauthenticated
+IP quota. An active connection with a verified installation is required. GitHub
+supports installation tokens for [Get a user](https://docs.github.com/en/rest/users/users#get-a-user)
+without additional permissions. Lookup errors distinguish unavailable accounts,
+rate limits, and installation authentication or access failures.
+
 Choose automatic events and author filters in **Settings** to control which
 authored PRs and issues start work. Authorized mentions remain available with
 automatic events off and bypass automatic author filters. The shared external-
@@ -186,12 +193,59 @@ Event prompts supplement the agent's instructions. Repository content and PR
 prose are untrusted input and cannot change tool authority or publication policy.
 The execution records the configuration revision and event context used.
 
+## Paperclip task completion
+
+Set the review task's completion rule in the agent's saved instructions or the
+bot's Settings. A review score controls the configured GitHub check separately;
+it does not automatically set the Paperclip task status.
+
+For a review-only assignment, you can use this instruction:
+
+> After a complete assessment of the current PR head is rated 5/5 and its
+> publication is confirmed, finish the Paperclip task with
+> reportedWorkDisposition=done. Include the publication link, reviewed commit,
+> score, coverage limits, and available check evidence. Do not wait for CI,
+> merge, or human approval to complete this review assignment. If CI results
+> are unavailable, say so; do not claim they passed.
+
+The GitHub prompts explain this rule when the configured assignment permits
+completion at 5/5. They retain explicit CI or merge requirements and configured
+below-5 tracking. A queued or uncertain publication, an incomplete assessment,
+or a changed head does not satisfy the example rule. Reuse an eligible confirmed
+assessment instead of publishing it again only to change status.
+
+A finite discussion reply can finish after confirmed publication when no assigned
+work remains. It does not need a new assessment or score. Use a response wait
+only for an authorized reply or later review that the assignment still needs.
+Timed checks require a saved monitor. An open PR or an available continuation
+alone is not a reason to wait. GitHub's merge requirements remain separate.
+
 ## Assessments, checks, and formal reviews
 
 The agent reads through task-bound bot tools, explicitly begins an assessment,
 and submits the reviewed commit, findings, rationale, and coverage. Paperclip
 validates the result and computes the **Paperclip Review** check. The default
 threshold is 5/5; choose 1–5 or report-only as needed.
+
+Finding categories come from the repository's review policy. Both manual and
+automatic review instructions list the configured categories. `begin_review`
+returns `findingCategories` from the assessment's saved policy snapshot; use
+these exact values in `findings[].category`. Metadata also includes
+`reviewPolicy.findingCategories`. The discovery schema describes this dynamic
+constraint rather than imposing a global enum. Unknown categories remain invalid;
+the error lists the accepted values. If no category applies, put the finding in
+the summary. An empty category list permits no structured findings.
+
+`submit_review.summary` contains the review body: the change, findings, and
+verdict. `rationale` adds evidence for the score and remaining risk without
+repeating the summary. Paperclip renders the bot-name/score heading and the
+reviewed-commit, coverage, and task/run footer from the structured fields. Agents
+must not copy these generated sections from an earlier published comment into
+either text field. This contract is included in new bots' tool schemas and in
+the review instructions generated for existing bots. Publication also removes
+leading copied score headings for the current bot, with a plain or Markdown-escaped
+name, or the legacy **Paperclip Review** name. Other review sections and the saved
+assessment remain intact.
 
 | Score | Assessment rubric |
 | --- | --- |

@@ -1,68 +1,66 @@
 import { describe, expect, it } from "vitest";
 import type { Db } from "@paperclipai/db";
-import { createInstanceRunSlots } from "./instance-run-slots.js";
+import {
+  assertInstanceRunSlotFree,
+  InstanceRunSlotsFull,
+  readInstanceRunLimit,
+} from "./instance-run-slots.js";
 
-/** Minimal Db stand-in: counts rows in an in-memory "running" set. */
-function fakeDb(running: { count: number }) {
-  return {
-    select: () => ({ from: () => ({ where: async () => [{ count: running.count }] }) }),
-  } as unknown as Db;
+/**
+ * Minimal Db stand-in. The first select reads instance settings (with
+ * `.limit()`), the second counts running runs (awaited after `.where()`).
+ */
+function fakeTx(general: Record<string, unknown>, running: number) {
+  const executed: unknown[] = [];
+  let selects = 0;
+  const tx = {
+    select: () => {
+      selects += 1;
+      const isSettings = selects === 1;
+      return {
+        from: () => ({
+          where: () => {
+            const rows = isSettings ? [{ general }] : [{ count: running }];
+            const result = Promise.resolve(rows) as Promise<unknown[]> & { limit: () => Promise<unknown[]> };
+            result.limit = () => Promise.resolve(rows);
+            return result;
+          },
+        }),
+      };
+    },
+    execute: async (query: unknown) => {
+      executed.push(query);
+      return [];
+    },
+  };
+  return { tx: tx as unknown as Db, executed };
 }
 
 describe("instance run slots", () => {
   it("is unlimited in the standard profile without a setting", async () => {
-    const slots = createInstanceRunSlots(fakeDb({ count: 50 }), {
-      getGeneral: async () => ({}),
-      deploymentProfile: "standard",
-    });
-    expect(await slots.resolveLimit()).toBeNull();
-    await expect(slots.withAdmission(async (free) => free)).resolves.toBe(Number.POSITIVE_INFINITY);
+    const { tx } = fakeTx({}, 50);
+    expect(await readInstanceRunLimit(tx, "standard")).toBeNull();
   });
 
-  it("defaults to one slot under local_only", async () => {
-    const running = { count: 0 };
-    const slots = createInstanceRunSlots(fakeDb(running), {
-      getGeneral: async () => ({}),
-      deploymentProfile: "local_only",
-    });
-    await expect(slots.withAdmission(async (free) => free)).resolves.toBe(1);
-    running.count = 1;
-    await expect(slots.withAdmission(async (free) => free)).resolves.toBe(0);
+  it("defaults to one slot under local_only and honors the setting", async () => {
+    expect(await readInstanceRunLimit(fakeTx({}, 0).tx, "local_only")).toBe(1);
+    expect(await readInstanceRunLimit(fakeTx({ maxConcurrentAgentRuns: 3 }, 0).tx, "local")).toBe(3);
   });
 
-  it("uses the configured limit", async () => {
-    const slots = createInstanceRunSlots(fakeDb({ count: 1 }), {
-      getGeneral: async () => ({ maxConcurrentAgentRuns: 3 }),
-      deploymentProfile: "local",
-    });
-    await expect(slots.withAdmission(async (free) => free)).resolves.toBe(2);
+  it("skips the lock entirely without a limit", async () => {
+    const { tx, executed } = fakeTx({}, 99);
+    await expect(assertInstanceRunSlotFree(tx, [], "standard")).resolves.toBeUndefined();
+    expect(executed).toHaveLength(0);
   });
 
-  it("serializes admissions so the last slot is claimed once", async () => {
-    const running = { count: 0 };
-    const slots = createInstanceRunSlots(fakeDb(running), {
-      getGeneral: async () => ({ maxConcurrentAgentRuns: 1 }),
-      deploymentProfile: "local",
-    });
-    const claims: number[] = [];
-    const admit = (id: number) => slots.withAdmission(async (free) => {
-      if (free <= 0) return false;
-      await new Promise((resolve) => setTimeout(resolve, 5));
-      running.count += 1; // the claim marks the run as running
-      claims.push(id);
-      return true;
-    });
-    const results = await Promise.all([admit(1), admit(2), admit(3)]);
-    expect(results.filter(Boolean)).toHaveLength(1);
-    expect(claims).toEqual([1]);
+  it("admits while slots are free and takes the advisory lock", async () => {
+    const { tx, executed } = fakeTx({ maxConcurrentAgentRuns: 2 }, 1);
+    await expect(assertInstanceRunSlotFree(tx, ["run-a"], "local")).resolves.toBeUndefined();
+    expect(executed).toHaveLength(1);
   });
 
-  it("releases the lock when admission throws", async () => {
-    const slots = createInstanceRunSlots(fakeDb({ count: 0 }), {
-      getGeneral: async () => ({ maxConcurrentAgentRuns: 1 }),
-      deploymentProfile: "local",
-    });
-    await expect(slots.withAdmission(async () => { throw new Error("boom"); })).rejects.toThrow("boom");
-    await expect(slots.withAdmission(async (free) => free)).resolves.toBe(1);
+  it("refuses when the instance is full", async () => {
+    const { tx } = fakeTx({}, 1);
+    await expect(assertInstanceRunSlotFree(tx, [], "local_only")).rejects.toBeInstanceOf(InstanceRunSlotsFull);
   });
 });
