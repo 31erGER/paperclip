@@ -56,6 +56,16 @@ yet: the agent configuration form still lists "Paperclip Runner" (disabled,
 Legacy is the default; the server rejects it in local profiles), and a live
 run with Pi against a local model server has not been performed.
 
+## Status — first upstream merge, 2026-11-19
+
+Merged 2590 upstream commits. The instance-wide run limit now lives in the
+upstream transactional slot check (`run-slot-admission.ts` →
+`instance-run-slots.ts`, Postgres advisory lock). Upstream onboarding offers
+only Claude/Codex; the earlier Pi/LM Studio onboarding needs a re-port to the
+new wizard. Upstream's local process boundary limits implicit board access
+to processes on the host, so remote browsers need an SSH tunnel or the
+authenticated mode.
+
 ## Verification
 
 - Focused Vitest for each module above, plus `pnpm -r typecheck`.

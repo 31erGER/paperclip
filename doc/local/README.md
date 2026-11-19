@@ -63,9 +63,17 @@ applies as well.
    (`llama-server -m model.gguf --port 8080`, `http://localhost:8080/v1`).
    Use a model with reliable tool calling and at least 32k context.
 2. Install Pi on the host: `npm install -g @earendil-works/pi-coding-agent@0.74.0`.
-3. In Paperclip, add a local AI connection (Connections → local / LM Studio)
-   with the server URL and the model id, then hire a Pi agent bound to it.
+3. In Paperclip, Agents → Add agent → Pi, choose the **Local** model source
+   (LM Studio or another local server) with the server URL and model id.
+   Upstream onboarding offers only Claude or Codex for the first agent.
    See `doc/connections/AI-CONNECTIONS.md` for the connection details.
+
+## Remote access
+
+Without sign-in (`local_trusted`), only processes on the Paperclip host get
+board access; a browser on another machine sees "Board access required".
+Use an SSH tunnel (`ssh -L 3100:127.0.0.1:3100 you@host`) or the
+`authenticated` deployment mode.
 
 ## Updating from the original repository
 

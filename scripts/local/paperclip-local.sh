@@ -14,7 +14,7 @@
 #   $PAPERCLIP_LOCAL_ENV_FILE, ~/.config/paperclip-local/env, <repo>/.env.local-harness
 #
 #   PAPERCLIP_DEPLOYMENT_PROFILE  standard | local | local_only   (default: local_only)
-#   HOST                          bind address (default 127.0.0.1; 0.0.0.0 for LAN access)
+#   HOST                          bind address (default 127.0.0.1; use an SSH tunnel for remote access)
 #   PORT                          HTTP port (default 3100)
 #
 # Data (embedded database, backups, agent homes) lives in ~/.paperclip.

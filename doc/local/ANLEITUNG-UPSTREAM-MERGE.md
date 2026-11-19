@@ -210,7 +210,40 @@ git push origin local-harness
 
 ---
 
-## 5. Tipps
+## 5. Erfahrungen aus dem ersten Merge (2590 Commits, 26 Konfliktdateien)
+
+- **Stark umgebaute Original-Dateien:** Hat das Original eine Datei grundlegend
+  neu geschrieben (z. B. `heartbeat/queue.ts`, `OnboardingWizard.tsx`), nicht
+  Block für Block flicken. Besser: Original-Version komplett übernehmen
+  (`git show upstream/master:<datei> > <datei>`) und den Fork-Einhang neu und
+  passend zur neuen Struktur einbauen.
+- **Teilweise automatisch gemergte Dateien prüfen:** Git übernimmt
+  konfliktfreie Fork-Stellen auch dann, wenn die Konfliktstellen „theirs“
+  bekommen. Das kann halbe Fork-Änderungen hinterlassen (z. B. ein Import
+  ohne Verwendung). Nach dem Lösen `git diff upstream/master -- <datei>`
+  ansehen.
+- **Verschobener Code:** Ist eine Funktion im Original umgezogen (z. B.
+  `managedAiHomeEnvironment` nach `packages/adapter-utils`), die
+  Fork-Änderung am neuen Ort einbauen: `git grep -n <name> upstream/master`.
+- **Lockfile:** Das Original passt mit pnpm 9 nicht immer zu seiner eigenen
+  Konfiguration. `git checkout --theirs pnpm-lock.yaml`, dann
+  `pnpm install --no-frozen-lockfile` und die erzeugte Lockfile committen.
+  Sonst ist der Arbeitsbaum nach jeder Installation verändert.
+- **Migrationsprüfung:** Beim Start prüft Paperclip neue Datenbank-Migrationen
+  gegen `upstream/master`. Während ein Merge noch nicht committet ist, meldet
+  die Prüfung viele Original-Migrationen als unbekannt. Das verschwindet nach
+  dem Merge-Commit. Die Quelle `upstream` muss eingerichtet und geholt sein
+  (macht `setup` bzw. das Update-Skript).
+- **Veraltete Build-Ausgaben:** Meldet die Server-Typprüfung fehlende Exporte
+  aus `@paperclipai/plugin-sdk` oder dem Runner, zuerst neu bauen:
+  `pnpm --filter @paperclipai/plugin-sdk ensure-build-deps` und
+  `pnpm --filter @paperclipai/paperclip-runner build:typescript`.
+- **Neue Original-Oberflächen:** Das Original bringt eigene neue Seiten mit,
+  z. B. die neue Agent-Übersicht mit Kostenkacheln. Nach dem Merge
+  `grep -rn "formatCents\|Costs" ui/src` auf neue Kostenanzeigen prüfen und
+  sie für `local_only` ausblenden.
+
+## 6. Tipps
 
 - **Oft mergen, z. B. wöchentlich.** Das Original bekommt tausende Commits
   pro Monat. Kleine Merges bringen kleine Konflikte.

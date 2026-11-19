@@ -32,7 +32,8 @@ Die Dateien im Überblick:
 packages/shared/src/deployment-profile.ts            Profile + Queue-Rechenregeln
 server/src/lib/deployment-profile.ts                 Profil lesen, Feature-Flags überschreiben
 server/src/lib/local-project-folder.ts               Ordnerprüfung
-server/src/services/heartbeat/instance-run-slots.ts  instanzweite Queue
+server/src/services/heartbeat/instance-run-slots.ts  instanzweite Queue (Prüfung in der Claim-Transaktion)
+server/src/services/heartbeat/run-slot-admission.ts  Einhang: ruft die instanzweite Prüfung auf
 ui/src/hooks/useDeploymentProfile.ts                 Profil in der Oberfläche
 ui/src/components/AgentRunQueueSetting.tsx           Queue-Einstellung
 ui/src/components/CostMetricsGate.tsx                sperrt Kostenseiten
@@ -118,8 +119,24 @@ PORT=3100
 | `local` | Host-Ausführung, aber auch Cloud-Modelle wie Claude oder Codex. Kosten bleiben sichtbar, die Queue ist unbegrenzt, solange du keine Grenze einstellst. |
 | `standard` | Verhalten wie im Original. Unter Linux x64 braucht es dann Rust für den Paperclip Runner. |
 
-`HOST=0.0.0.0` macht die Oberfläche im Netzwerk erreichbar. Mach das nur in
-einem vertrauenswürdigen Netz: Im Standardmodus gibt es keine Anmeldung.
+### Zugriff von einem anderen Rechner
+
+Ohne Anmeldung (Modus `local_trusted`, Standard) bekommen nur **Prozesse auf
+dem Paperclip-Rechner selbst** Board-Rechte. Das Original prüft bei jeder
+Verbindung, welcher lokale Prozess sie geöffnet hat, damit sich Agents nicht
+als Board ausgeben können. Ein Browser auf einem anderen Rechner sieht daher
+„Board access required“, auch mit `HOST=0.0.0.0`.
+
+Empfohlen: ein SSH-Tunnel vom Arbeitsrechner aus.
+
+```sh
+ssh -L 3100:127.0.0.1:3100 du@linux-rechner
+# danach im Browser des Arbeitsrechners: http://127.0.0.1:3100
+```
+
+Die Verbindung kommt dann vom SSH-Prozess auf dem Linux-Rechner. Das ist
+noch nicht getestet. Die Alternative ist der Modus mit Anmeldung
+(`authenticated`, siehe `doc/DEPLOYMENT-MODES.md`).
 
 Nach jeder Änderung an der Datei neu starten (`systemctl --user restart
 paperclip-local` oder `start` erneut ausführen).
@@ -167,11 +184,15 @@ der älteste wartende Run, egal von welchem Agent.
    Das Modell sollte Tool-Calling zuverlässig beherrschen und mindestens
    32k Kontext haben. Paperclip schickt lange Anweisungen.
 2. Pi installieren: `npm install -g @earendil-works/pi-coding-agent@0.74.0`
-3. In Paperclip die lokale Verbindung anlegen: beim Onboarding „Pi“ und
-   „Connect LM Studio“ wählen, oder später unter Settings → Connections.
-   Server-Adresse und Modell-ID eintragen. Die Adresse muss auf localhost
-   zeigen.
-4. Einen Pi-Agent mit dieser Verbindung einstellen.
+3. Agents → **Add agent** → **Pi**. Als Modellquelle **Local** wählen
+   („LM Studio or another local model server“), Server-Adresse und Modell-ID
+   eintragen. Die Adresse muss auf localhost zeigen.
+4. Den Agent speichern und einem Projekt Aufgaben geben.
+
+Hinweis: Das Onboarding des Originals bietet für den **ersten** Agent nur
+Claude oder Codex an. Pi richtest du über „Add agent“ ein. Ob sich das
+Onboarding ganz ohne Claude oder Codex abschließen lässt, ist noch nicht
+geprüft (siehe Abschnitt 8).
 
 ### Paperclip selbst mit Pi im Terminal ändern
 
@@ -219,7 +240,8 @@ nicht nutzt.
 | „Project folder does not exist on this host“ | Ordner anlegen (`mkdir -p …`) und den absoluten Pfad verwenden. |
 | Agent liefert Unsinn | Queue auf „1 at a time“ stellen; Modell mit Tool-Calling und genug Kontext verwenden. |
 | `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH` | `pnpm install --no-frozen-lockfile` (das Setup-Skript macht das automatisch). |
-| Oberfläche nicht erreichbar | `scripts/local/paperclip-local.sh status`; bei Zugriff von einem anderen Rechner `HOST=0.0.0.0`. |
+| Oberfläche nicht erreichbar | `scripts/local/paperclip-local.sh status`. Von einem anderen Rechner per SSH-Tunnel zugreifen (Abschnitt 4). |
+| „Board access required“ im Browser | Der Browser läuft nicht auf dem Paperclip-Rechner (oder unter WSL im Windows-Browser). SSH-Tunnel oder Modus mit Anmeldung verwenden (Abschnitt 4). |
 | Pi-Agent: „model not found“ | Modell-ID in der Verbindung muss exakt der ID im Modellserver entsprechen. |
 
 ## 8. Bekannte Grenzen
@@ -230,3 +252,9 @@ nicht nutzt.
   einem Terminal oder systemd verwenden.
 - Ein vollständiger Lauf mit Pi gegen ein lokales Modell ist noch nicht
   automatisiert getestet.
+- Das Onboarding des Originals kennt für den ersten Agent nur Claude und
+  Codex. Die frühere Pi/LM-Studio-Variante des Onboardings muss auf den neuen
+  Wizard übertragen werden.
+- Unter WSL bekommt ein Windows-Browser keine Board-Rechte (siehe
+  Abschnitt 4). Auf einem echten Linux-Rechner mit Browser auf demselben
+  Rechner betrifft das nicht.
