@@ -40,6 +40,12 @@ First-agent onboarding offers only Claude and Codex, subject to instance adapter
 availability. Other providers remain available through Add agent after onboarding.
 A saved draft for another provider requires a new choice.
 
+Fork 31erGER: under the `local` and `local_only` deployment profiles
+(`PAPERCLIP_DEPLOYMENT_PROFILE`) the row also offers Pi and Hermes with
+**Connect LM Studio** (loopback Chat Completions, default
+`http://localhost:1234/v1`, no authentication); the agent is pinned to the local
+execution environment. See `doc/local/ANLEITUNG-LOCAL-HARNESS.md`.
+
 ### `cli-setup`
 
 Use `paperclipai onboard --help` or `paperclipai run --help` to select an isolated data directory before setup.

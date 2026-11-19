@@ -24,7 +24,8 @@ normale Prozesse direkt in diesem Ordner.
 | **Start-Skript** | `scripts/local/paperclip-local.sh` mit `setup`, `start`, `dev`, `status`, `stop` und `check`, dazu eine systemd-Unit. |
 | **Update-Skript** | `scripts/local/update-from-upstream.sh` holt Änderungen vom Original, siehe [ANLEITUNG-UPSTREAM-MERGE.md](ANLEITUNG-UPSTREAM-MERGE.md). |
 | **Agent-Leitfaden** | `AGENTS.local.md`: kurze Karte der Fork-Module für Coding-Agents wie Pi. |
-| **Aus OneDrive übernommen** | LM-Studio-Onboarding für Pi und Hermes sowie die Datenschutz-Härtung (Telemetrie und externe Diagnose aus). |
+| **Lokales Onboarding** | In den lokalen Profilen bietet das Onboarding für den ersten Agent zusätzlich Pi und Hermes mit LM Studio oder llama.cpp an. |
+| **Aus OneDrive übernommen** | Datenschutz-Härtung (Telemetrie und externe Diagnose aus) und die lokale Verbindungsart für Pi und Hermes. |
 
 Die Dateien im Überblick:
 
@@ -184,15 +185,19 @@ der älteste wartende Run, egal von welchem Agent.
    Das Modell sollte Tool-Calling zuverlässig beherrschen und mindestens
    32k Kontext haben. Paperclip schickt lange Anweisungen.
 2. Pi installieren: `npm install -g @earendil-works/pi-coding-agent@0.74.0`
-3. Agents → **Add agent** → **Pi**. Als Modellquelle **Local** wählen
-   („LM Studio or another local model server“), Server-Adresse und Modell-ID
-   eintragen. Die Adresse muss auf localhost zeigen.
-4. Den Agent speichern und einem Projekt Aufgaben geben.
+3. **Erster Agent im Onboarding:** In den Profilen `local` und
+   `local_only` bietet der Schritt „Connect a model“ zusätzlich **Pi** und
+   **Hermes** an (unter `local_only` an erster Stelle). Pi wählen, dann
+   **Connect LM Studio**: Die Adresse ist mit `http://localhost:1234/v1`
+   vorbelegt, ein API-Schlüssel ist nicht nötig. Für llama.cpp die Adresse
+   anpassen (z. B. `http://localhost:8080/v1`). **Save connection**, Modell
+   wählen, **Connect**. Der Agent läuft in der lokalen Umgebung, ohne
+   Cloud-Konto.
+4. **Weitere Agents:** Agents → **Add agent** → **Pi**, Modellquelle
+   **Local** wählen und dieselbe lokale Verbindung verwenden.
 
-Hinweis: Das Onboarding des Originals bietet für den **ersten** Agent nur
-Claude oder Codex an. Pi richtest du über „Add agent“ ein. Ob sich das
-Onboarding ganz ohne Claude oder Codex abschließen lässt, ist noch nicht
-geprüft (siehe Abschnitt 8).
+Im Profil `standard` zeigt das Onboarding wie im Original nur Claude und
+Codex.
 
 ### Paperclip selbst mit Pi im Terminal ändern
 
@@ -252,9 +257,6 @@ nicht nutzt.
   einem Terminal oder systemd verwenden.
 - Ein vollständiger Lauf mit Pi gegen ein lokales Modell ist noch nicht
   automatisiert getestet.
-- Das Onboarding des Originals kennt für den ersten Agent nur Claude und
-  Codex. Die frühere Pi/LM-Studio-Variante des Onboardings muss auf den neuen
-  Wizard übertragen werden.
 - Unter WSL bekommt ein Windows-Browser keine Board-Rechte (siehe
   Abschnitt 4). Auf einem echten Linux-Rechner mit Browser auf demselben
   Rechner betrifft das nicht.

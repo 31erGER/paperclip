@@ -2398,6 +2398,70 @@ describe("OnboardingWizard restore-gate (stale localStorage across accounts)", (
       } finally { await act(async () => handles.root.unmount()); }
     });
 
+    // Fork 31erGER: local deployment profiles offer Pi and Hermes with a local
+    // model server for the first agent.
+    it.each(["hermes_local", "pi_local"])("configures %s with LM Studio without cloud credentials under local_only", async adapterType => {
+      localHealth.get.mockResolvedValue({ status: "ok", deploymentMode: "local_trusted", deploymentProfile: "local_only" });
+      mockAdapterRegistry.list = [{ type: "claude_local" }, { type: "codex_local" }, { type: adapterType }];
+      mockEnvironmentsApi.list.mockResolvedValue([LOCAL_ENVIRONMENT, SANDBOX_ENVIRONMENT]);
+      mockInstanceSettingsApi.get.mockResolvedValue({ defaultEnvironmentId: SANDBOX_ENVIRONMENT.id });
+      const localAccounts: import("@paperclipai/shared").AiConnectionList = { currentUserId: "user-1", canManageConnections: true, connections: [] };
+      managedApi.list.mockImplementation(async () => structuredClone(localAccounts) as never);
+      managedApi.create.mockImplementationOnce(async () => {
+        localAccounts.connections = [{ id: "managed-connection", grantId: "managed-grant", companyId: "company-new",
+          name: "My LM Studio", provider: "openai", method: "api_key", ownership: "personal", ownerUserId: "user-1", isDefault: false, status: "connected",
+          routing: { kind: "local", protocol: "chat", auth: "none", baseUrl: "http://localhost:1234/v1", models: [{ id: "local/model" }] },
+        }] as never;
+        return { connectionId: "managed-connection", grantId: "managed-grant" } as never;
+      });
+      mockAdapterBuild.buildAdapterConfig.mockImplementation(values => ({ model: values?.model }));
+      const handles = await openStep4({ adapterType });
+      const click = async (label: string) => {
+        const button = [...document.body.querySelectorAll("button")].find(entry => entry.textContent?.trim() === label)!;
+        expect(button, label).toBeTruthy();
+        await act(async () => button.click()); await flushReact();
+      };
+      try {
+        const tiles = [...document.body.querySelectorAll('[role="radio"]')].map(tile => tile.textContent ?? "");
+        expect(tiles.length).toBe(3);
+        await pickSource(new RegExp(adapterType));
+        await click("Connect LM Studio");
+        expect((document.querySelector('[aria-label="Provider URL"]') as HTMLInputElement).value).toBe("http://localhost:1234/v1");
+        expect(document.querySelector('input[aria-label="API key"]')).toBeNull();
+        await click("Save connection");
+        await vi.waitFor(() => expect(document.querySelector('select[aria-label="Model"]')).toBeTruthy());
+        expect(mockAgentsApi.hire).not.toHaveBeenCalled();
+        const select = document.querySelector('select[aria-label="Model"]') as HTMLSelectElement;
+        const option = [...select.options].map(entry => entry.value).find(value => value.endsWith("local/model"))!;
+        expect(option).toBeTruthy();
+        await act(async () => { select.value = option; select.dispatchEvent(new Event("change", { bubbles: true })); });
+        await flushReact();
+        await click("Connect");
+        const binding = { provider: "openai", method: "api_key", mode: "delegated", connectionId: "managed-connection", grantId: "managed-grant" };
+        await vi.waitFor(() => expect(mockAgentsApi.hire).toHaveBeenCalled());
+        expect(mockAgentsApi.testEnvironment).toHaveBeenCalledWith("company-new", adapterType, expect.objectContaining({ aiConnection: binding, environmentId: LOCAL_ENVIRONMENT.id, adapterConfig: expect.objectContaining({ model: option }) }), expect.anything());
+        expect(mockAgentsApi.hire).toHaveBeenCalledWith("company-new", expect.objectContaining({ adapterType, defaultEnvironmentId: LOCAL_ENVIRONMENT.id, runtimeConfig: expect.objectContaining({ aiConnection: binding }) }));
+        expect(managedApi.startLocalLogin).not.toHaveBeenCalled();
+      } finally {
+        await act(async () => handles.root.unmount());
+        managedApi.list.mockResolvedValue({ currentUserId: "user-1", connections: [] });
+        localHealth.get.mockReset();
+      }
+    }, 20_000);
+
+    it("does not offer Pi or Hermes for the first agent in the standard profile", async () => {
+      localHealth.get.mockResolvedValue({ status: "ok", deploymentMode: "local_trusted" });
+      mockAdapterRegistry.list = [{ type: "claude_local" }, { type: "codex_local" }, { type: "pi_local" }, { type: "hermes_local" }];
+      const handles = await openStep4();
+      try {
+        const tiles = [...document.body.querySelectorAll('[role="radio"]')].map(tile => tile.textContent ?? "");
+        expect(tiles.some(text => /pi_local|hermes_local/.test(text))).toBe(false);
+      } finally {
+        await act(async () => handles.root.unmount());
+        localHealth.get.mockReset();
+      }
+    });
+
     it.each([["successful refresh", false], ["failed refresh and retry", true]] as const)("saves a custom gateway without probing, then explicitly tests and hires with its selected model: %s", async (_scenario, failRefresh) => {
       const gatewayAccounts: import("@paperclipai/shared").AiConnectionList = {
         currentUserId: "user-1", canManageConnections: true, connections: [],

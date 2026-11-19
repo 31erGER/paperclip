@@ -61,8 +61,8 @@ run with Pi against a local model server has not been performed.
 Merged 2590 upstream commits. The instance-wide run limit now lives in the
 upstream transactional slot check (`run-slot-admission.ts` →
 `instance-run-slots.ts`, Postgres advisory lock). Upstream onboarding offers
-only Claude/Codex; the earlier Pi/LM Studio onboarding needs a re-port to the
-new wizard. Upstream's local process boundary limits implicit board access
+only Claude/Codex; under local profiles the fork re-adds Pi and Hermes with
+LM Studio to the new wizard (`LOCAL_MODEL_ONBOARDING_TYPES`). Upstream's local process boundary limits implicit board access
 to processes on the host, so remote browsers need an SSH tunnel or the
 authenticated mode.
 

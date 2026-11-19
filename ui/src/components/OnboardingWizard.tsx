@@ -17,6 +17,8 @@ import type { AiConnectionBinding } from "@paperclipai/shared";
 import { storeProviderApiKey } from "../lib/provider-credential";
 import { SavedProviderKeySelect, useSavedProviderKeys } from "./onboarding/SavedProviderKeySelect";
 import { OnboardingGatewaySetup } from "./onboarding/OnboardingGatewaySetup";
+import { OnboardingLocalSetup } from "./onboarding/OnboardingLocalSetup";
+import { useDeploymentProfile } from "@/hooks/useDeploymentProfile";
 import { randomAgentAppearance, resolveAgentAppearance, agentAppearanceSchema } from "@paperclipai/shared";
 import { OnboardingCharacter } from "./onboarding/OnboardingCharacter";
 import { useEffect, useState, useMemo, useRef } from "react";
@@ -155,6 +157,11 @@ type Step = 0 | 1 | 2 | 3 | 4 | 5;
 type AdapterType = string;
 
 const ONBOARDING_ADAPTER_TYPES = new Set(["claude_local", "codex_local"]);
+/**
+ * Fork 31erGER: under a local deployment profile the first agent may also use
+ * a local model server (LM Studio, llama.cpp) through Pi or Hermes.
+ */
+const LOCAL_MODEL_ONBOARDING_TYPES = new Set(["pi_local", "hermes_local"]);
 
 function restoreOnboardingAdapterType(savedAdapterType: unknown, provider?: unknown, savedCopilot?: unknown): AdapterType {
   if (savedAdapterType === "paperclip_runner" && provider === "pi") return "pi_local";
@@ -443,6 +450,7 @@ function OnboardingWizardInner({
   } = useDialog();
   const { companies, setSelectedCompanyId, loading: companiesLoading } = useCompany();
   const queryClient = useQueryClient();
+  const { isLocal: localProfile, profile: deploymentProfile } = useDeploymentProfile();
   const navigate = useNavigate();
   const location = useLocation();
   const { companyPrefix: matchedCompanyPrefix } = useParams<{ companyPrefix?: string }>();
@@ -586,6 +594,7 @@ function OnboardingWizardInner({
   const [gatewayConnection, setGatewayConnection] = useState<{
     companyId: string; adapterType: string; binding: AiConnectionBinding;
   }>();
+  const isLocalSource = localProfile && LOCAL_MODEL_ONBOARDING_TYPES.has(adapterType);
   const savedNativeRunnerDraft = saved?.adapterType === "paperclip_runner" && !savedCopilotDraft;
   const [cwd, setCwd] = useState((saved?.cwd as string) ?? "");
   const [model, setModel] = useState(
@@ -674,7 +683,7 @@ function OnboardingWizardInner({
     ? selectedSavedKey.id
     : savedKeys.options[0]?.id;
   const selectedApiKey = savedKeys.options.find((option) => option.id === selectedApiKeyId);
-  const credentialMode = credentialModeChoice ?? (
+  const credentialMode = isLocalSource ? "api" : credentialModeChoice ?? (
     (savedKeys.subscriptions.length > 0 || (adapterType === "claude_local" && savedKeys.storedLogin.data))
       ? "subscription" : savedKeys.options.length || adapterType === "opencode_local" ? "api" : "subscription"
   );
@@ -741,6 +750,7 @@ function OnboardingWizardInner({
     const restoredBinding = restoredSetup?.companyId === createdCompanyId
       && agentHarnessType(restoredSetup.adapterType, restoredSetup.adapterConfig) === agentHarnessType(adapterType, {})
       ? restoredSetup.runtimeConfig?.aiConnection as AiConnectionBinding | undefined : undefined;
+    if (isLocalSource) return restoredBinding;
     if (!selectedSavedKey && !apiKey.trim()) {
       if (restoredBinding?.method === (credentialMode === "api" ? "api_key" : "subscription")) return restoredBinding;
       const savedEnv = restoredSetup?.companyId === createdCompanyId
@@ -755,7 +765,7 @@ function OnboardingWizardInner({
   }
   const connectionModelState = useConnectionModelsState(
     effectiveOnboardingOpen && step === 4 && credentialMode === "api" ? createdCompanyId : null,
-    managedBindingForStep(), adapterType,
+    managedBindingForStep(), adapterType, { localOnly: isLocalSource },
   );
   const connectionModels = connectionModelState.connectionModels;
   const hasGatewaySelection = credentialMode === "api" && gatewayConnection?.companyId === createdCompanyId && gatewayConnection.adapterType === adapterType;
@@ -770,7 +780,7 @@ function OnboardingWizardInner({
   }
   const gatewayLookupFailed = hasGatewaySelection && !connectionModelState.refreshing
     && Boolean(connectionModelState.error || (!connectionModels && !connectionModelState.loading));
-  const connectionModelReady = (!hasGatewaySelection && !connectionModels) || Boolean(connectionModels
+  const connectionModelReady = (!isLocalSource && !hasGatewaySelection && !connectionModels) || Boolean(connectionModels
     && (!hasGatewaySelection || (!connectionModelState.error && !connectionModelState.refreshing))
     && model.trim() && (connectionModels.models.length === 0 || connectionModels.models.some(entry => entry.id === model.trim())));
   createdCompanyIdRef.current = createdCompanyId;
@@ -966,8 +976,8 @@ function OnboardingWizardInner({
   const loginEnvironmentResolution = useMemo(() => {
     try {
       return { environmentId: resolveAdapterTestEnvironmentId({
-        agentDefaultEnvironmentId: restoredSetup?.companyId === createdCompanyId ? restoredSetup.defaultEnvironmentId : null,
-        instanceDefaultEnvironmentId: instanceSettingsForLogin?.defaultEnvironmentId ?? null,
+        agentDefaultEnvironmentId: isLocalSource ? resolveLocalDefaultEnvironmentId(loginEnvironmentList) : restoredSetup?.companyId === createdCompanyId ? restoredSetup.defaultEnvironmentId : null,
+        instanceDefaultEnvironmentId: isLocalSource ? null : instanceSettingsForLogin?.defaultEnvironmentId ?? null,
         localDefaultEnvironmentId: resolveLocalDefaultEnvironmentId(loginEnvironmentList),
         managedSandboxOnly: experimentalSettingsForLogin?.enableManagedSandboxOnly === true,
         managedSandboxEnvironmentId: resolveManagedSandboxEnvironmentId(loginEnvironmentList),
@@ -977,7 +987,7 @@ function OnboardingWizardInner({
       return { environmentId: null, error: error instanceof Error ? error.message : "Could not resolve the execution environment." };
     }
   }, [
-    restoredSetup, createdCompanyId,
+    restoredSetup, createdCompanyId, isLocalSource,
     instanceSettingsForLogin?.defaultEnvironmentId,
     loginEnvironmentList,
     experimentalSettingsForLogin?.enableManagedSandboxOnly,
@@ -1204,7 +1214,7 @@ function OnboardingWizardInner({
     adapterCaps.supportsSkills ||
     adapterCaps.supportsLocalAgentJwt;
   const isLocalAdapter =
-    isLocalAdapterCaps ||
+    isLocalAdapterCaps || isLocalSource ||
     adapterType === "claude_local" ||
     adapterType === "codex_local" ||
     adapterType === "gemini_local" ||
@@ -1218,17 +1228,20 @@ function OnboardingWizardInner({
   const { recommendedAdapters, moreAdapters } = useMemo(() => {
     const all = listUIAdapters()
       .filter((a) =>
-        ONBOARDING_ADAPTER_TYPES.has(a.type) &&
+        (ONBOARDING_ADAPTER_TYPES.has(a.type) || (localProfile && LOCAL_MODEL_ONBOARDING_TYPES.has(a.type))) &&
         !disabledTypes.has(a.type) &&
         isVisualAdapterChoice(a.type)
       )
-      .map((a) => ({ ...getAdapterDisplay(a.type), type: a.type }));
+      .map((a) => ({ ...getAdapterDisplay(a.type), type: a.type }))
+      .map((a) => LOCAL_MODEL_ONBOARDING_TYPES.has(a.type) ? { ...a, recommended: true } : a)
+      .sort((left, right) => deploymentProfile !== "local_only" ? 0
+        : Number(LOCAL_MODEL_ONBOARDING_TYPES.has(right.type)) - Number(LOCAL_MODEL_ONBOARDING_TYPES.has(left.type)));
 
     return {
       recommendedAdapters: all.filter((a) => a.recommended),
       moreAdapters: all.filter((a) => !a.recommended),
     };
-  }, [disabledTypes]);
+  }, [disabledTypes, localProfile, deploymentProfile]);
 
   /**
    * A source chosen from the visible row. Read off the row rather than off
@@ -1258,7 +1271,9 @@ function OnboardingWizardInner({
   const restoredApiCredential = restoredSetup?.companyId === createdCompanyId
     && agentHarnessType(restoredSetup.adapterType, restoredSetup.adapterConfig) === agentHarnessType(adapterType)
     && !selectedSavedKey && (restoredSetup.adapterConfig.env as Record<string, unknown> | undefined)?.[apiKeyEnvKeyFor(adapterType)];
-  const connectStepReady = Boolean(setupPrepared || createdAgentId) && sourceSelected && !adapterEnvLoading && !savedKeys.loading && runnerDiscoveryReady && connectionModelReady;
+  const localEnvironmentReady = !isLocalSource || Boolean(loginEnvironmentSettingsReady && !loginEnvironmentResolution.error
+    && loginEnvironmentList.some(environment => environment.id === resolvedLoginEnvironmentId && environment.driver === "local" && environment.status === "active"));
+  const connectStepReady = Boolean(setupPrepared || createdAgentId) && sourceSelected && !adapterEnvLoading && !savedKeys.loading && runnerDiscoveryReady && connectionModelReady && localEnvironmentReady;
 
   useEffect(() => {
     if (step !== 4 || !createdCompanyId || !agentName.trim() || !adapterRegistryLoaded
@@ -2192,8 +2207,8 @@ function OnboardingWizardInner({
         // resolver throws when no managed sandbox is available, which the outer
         // catch surfaces as a fail-closed error rather than a local host probe.
         const environmentId = resolveAdapterTestEnvironmentId({
-          agentDefaultEnvironmentId: savedAgent?.companyId === createdCompanyId ? savedAgent.defaultEnvironmentId : null,
-          instanceDefaultEnvironmentId: settings?.defaultEnvironmentId ?? null,
+          agentDefaultEnvironmentId: isLocalSource ? resolveLocalDefaultEnvironmentId(environmentList) : savedAgent?.companyId === createdCompanyId ? savedAgent.defaultEnvironmentId : null,
+          instanceDefaultEnvironmentId: isLocalSource ? null : settings?.defaultEnvironmentId ?? null,
           localDefaultEnvironmentId: resolveLocalDefaultEnvironmentId(environmentList),
           managedSandboxOnly,
           managedSandboxEnvironmentId: resolveManagedSandboxEnvironmentId(environmentList),
@@ -2335,6 +2350,10 @@ function OnboardingWizardInner({
   async function handleGiveHeartbeat() {
     if (!createdCompanyId) return;
     if (!setupPrepared && !createdAgentId) return;
+    if (isLocalSource && (!sourceSelected || !localEnvironmentReady || !managedBindingForStep())) {
+      setError("Choose a local connection and an available local execution environment before connecting your agent.");
+      return;
+    }
     if (!connectionModelReady) {
       setError("Choose a model for this gateway connection before connecting your agent.");
       return;
@@ -2568,7 +2587,7 @@ function OnboardingWizardInner({
         // the chief-of-staff persona over the agent's entry instruction file.
         // The wizard no longer composes or overwrites it.
         onboardingFirstAgent: true,
-        ...(restoredSetup?.companyId === createdCompanyId && restoredSetup.defaultEnvironmentId ? { defaultEnvironmentId: resolvedLoginEnvironmentId } : {}),
+        ...(isLocalSource || (restoredSetup?.companyId === createdCompanyId && restoredSetup.defaultEnvironmentId) ? { defaultEnvironmentId: resolvedLoginEnvironmentId } : {}),
         runtimeConfig: buildSetupRuntimeConfig(true)
       });
       if (!isCurrent()) return;
@@ -3038,6 +3057,7 @@ function OnboardingWizardInner({
                         id: opt.type,
                         label: CONNECT_SOURCE_NAMES[opt.type] ?? opt.label,
                         icon: <ModelSourceMark type={opt.type} Fallback={opt.icon} />,
+                        ...(LOCAL_MODEL_ONBOARDING_TYPES.has(opt.type) ? { credentialMode: "local" as const } : {}),
                       }))}
                       mode={credentialMode}
                       selectedId={
@@ -3053,7 +3073,12 @@ function OnboardingWizardInner({
                         autoConnectStartedRef.current = false;
                         setSourcePicked(true);
                         setAdapterType(id);
-                        if (id !== adapterType) setRunner("auto");
+                        if (LOCAL_MODEL_ONBOARDING_TYPES.has(id)) setRunner("legacy");
+                        else if (id !== adapterType) setRunner("auto");
+                        if (id !== adapterType) {
+                          setGatewayConnection(undefined);
+                          setApiKey("");
+                        }
                         // Older drafts may already pair OpenAI with the Claude
                         // model retained by a previous source switch.
                         if (id !== adapterType || (id === "codex_local" && credentialMode === "subscription" && model.startsWith("claude-"))) {
@@ -3094,7 +3119,7 @@ function OnboardingWizardInner({
                       transition={{ opacity: SOURCE_LINK_EXIT, height: MAKE_ROOM }}
                     >
                       <div className="-ml-3 mt-1">
-                        <CredentialModeLink mode={credentialMode} onChange={setCredentialMode} />
+                        {!isLocalSource && <CredentialModeLink mode={credentialMode} onChange={setCredentialMode} />}
                         {savedKeys.options.length > 0 && <p className="px-3 text-sm text-muted-foreground">{savedKeys.options.length} saved API {savedKeys.options.length === 1 ? "key available" : "keys available"}.</p>}
                         {credentialMode === "subscription" && authSignalStatus === "present" && <p className="px-3 text-sm text-muted-foreground">An existing provider connection is available.</p>}
                       </div>
@@ -3142,6 +3167,22 @@ function OnboardingWizardInner({
                         <Loader2 className="size-4 animate-spin" />
                         {connectProgress}
                       </p>
+                    ) : isLocalSource && createdCompanyId ? (
+                      <OnboardingLoginCard instruction="Connect a local model (LM Studio, llama.cpp)">
+                        {!localEnvironmentReady ? <p role="alert" className="text-sm text-destructive">{loginEnvironmentResolution.error ?? "Waiting for an active local execution environment. Check your instance environment settings if this persists."}</p> : <>
+                          <OnboardingLocalSetup companyId={createdCompanyId} agentId={setupAgentId ?? undefined}
+                            environmentId={resolvedLoginEnvironmentId ?? undefined} value={managedBindingForStep()}
+                            onChange={binding => {
+                              setGatewayConnection({ companyId: createdCompanyId, adapterType, binding });
+                              setModel(""); setError(null);
+                            }} />
+                          {connectionModelState.error && <p role="alert" className="text-sm text-destructive">Could not load the local connection. <Button type="button" variant="ghost" onClick={() => void connectionModelState.refresh()}>Retry</Button></p>}
+                          {connectionModels && <ModelDropdown models={connectionModels.models} value={model}
+                            onChange={setModel} open={modelOpen} onOpenChange={setModelOpen}
+                            allowDefault={false} required groupByProvider={false}
+                            creatable={connectionModels.models.length === 0} presentation="native" />}
+                        </>}
+                      </OnboardingLoginCard>
                     ) : credentialMode === "api" ? (
                       <OnboardingLoginCard
                         instruction={hasGatewaySelection || connectionModels ? "Choose a model for your saved connection" : savedKeys.options.length ? "Choose a saved API key or enter a new one" : `Provide your ${
