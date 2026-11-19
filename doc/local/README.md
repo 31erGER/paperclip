@@ -1,5 +1,8 @@
 # Local harness (fork 31erGER)
 
+Deutsche Anleitungen: [Local Harness benutzen](ANLEITUNG-LOCAL-HARNESS.md) ·
+[Original-Repository einmergen](ANLEITUNG-UPSTREAM-MERGE.md)
+
 Run Paperclip as a meta harness on one Linux machine: several companies,
 several projects, many agents, all as plain host processes. No Docker, no
 sandbox provider, no Rust toolchain, no C compiler.

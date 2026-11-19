@@ -1,0 +1,232 @@
+# Anleitung: Paperclip Local Harness (Branch `local-harness`)
+
+Diese Anleitung beschreibt, was der Branch `local-harness` im Fork
+`31erGER/paperclip` gegenüber dem Original ändert, wie du ihn auf einem
+Linux-Rechner installierst und wie du ihn im Alltag benutzt.
+
+Kurz gesagt: Paperclip läuft auf **einem Linux-Rechner ohne Container**,
+ohne Docker, ohne Rust und ohne C-Compiler. Paperclip verwaltet als
+„Meta-Harness“ mehrere Firmen, Projekte und Agents. **Ein Projekt ist ein
+Ordner** auf dem Rechner, so wie in Claude Code. Die Agents laufen als
+normale Prozesse direkt in diesem Ordner.
+
+---
+
+## 1. Was sich geändert hat
+
+| Änderung | Wirkung |
+| --- | --- |
+| **Deployment-Profile** (`PAPERCLIP_DEPLOYMENT_PROFILE`) | `standard`, `local` oder `local_only`, siehe Abschnitt 4. |
+| **Nur Host-Ausführung** | In `local` und `local_only` laufen alle Agents über ihren normalen Host-Adapter (`pi_local`, `claude_local`, `codex_local`, …). Paperclip Runner, Managed Sandbox, Dot, Grok Bot und Muse sind abgeschaltet. Beim Start wird nichts mit Rust gebaut. |
+| **Projektordner** | Der Dialog „Add Project“ hat ein Feld **Project folder**. In den lokalen Profilen ist es Pflicht, und der Server prüft, ob der Ordner existiert. |
+| **Agent-Run-Queue** | Einstellungen → General → **Agent run queue**: Höchstzahl gleichzeitiger Agent-Runs über alle Firmen. Weitere Runs warten und starten in Ankunftsreihenfolge. |
+| **Keine Preis-Metriken** | Im Profil `local_only` fehlen Costs-Seiten, Ausgaben-Kacheln, Budget-Tabs und Dollarbeträge. Token und Laufzeiten bleiben sichtbar. |
+| **Start-Skript** | `scripts/local/paperclip-local.sh` mit `setup`, `start`, `dev`, `status`, `stop` und `check`, dazu eine systemd-Unit. |
+| **Update-Skript** | `scripts/local/update-from-upstream.sh` holt Änderungen vom Original, siehe [ANLEITUNG-UPSTREAM-MERGE.md](ANLEITUNG-UPSTREAM-MERGE.md). |
+| **Agent-Leitfaden** | `AGENTS.local.md`: kurze Karte der Fork-Module für Coding-Agents wie Pi. |
+| **Aus OneDrive übernommen** | LM-Studio-Onboarding für Pi und Hermes sowie die Datenschutz-Härtung (Telemetrie und externe Diagnose aus). |
+
+Die Dateien im Überblick:
+
+```
+packages/shared/src/deployment-profile.ts            Profile + Queue-Rechenregeln
+server/src/lib/deployment-profile.ts                 Profil lesen, Feature-Flags überschreiben
+server/src/lib/local-project-folder.ts               Ordnerprüfung
+server/src/services/heartbeat/instance-run-slots.ts  instanzweite Queue
+ui/src/hooks/useDeploymentProfile.ts                 Profil in der Oberfläche
+ui/src/components/AgentRunQueueSetting.tsx           Queue-Einstellung
+ui/src/components/CostMetricsGate.tsx                sperrt Kostenseiten
+scripts/local/                                       Start-, Update-Skript, systemd
+doc/local/                                           diese Anleitungen
+AGENTS.local.md                                      Leitfaden für Coding-Agents
+```
+
+In großen Original-Dateien gibt es nur kurze Einhänge. Sie sind mit dem
+Kommentar `fork 31erGER` markiert.
+
+---
+
+## 2. Voraussetzungen
+
+- Linux x64 oder arm64 (Ubuntu, Debian, Fedora …; WSL2 geht auch)
+- `git` und `curl`
+- Node.js 24 und pnpm 9. Das Setup-Skript prüft beides und aktiviert pnpm
+  selbst. Docker, Rust und gcc sind **nicht** nötig.
+
+Node.js 24 ohne Root-Rechte über nvm installieren:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+. ~/.nvm/nvm.sh
+nvm install 24
+nvm alias default 24
+```
+
+---
+
+## 3. Installation
+
+```sh
+mkdir -p ~/dev && cd ~/dev
+git clone https://github.com/31erGER/paperclip.git paperclip-local
+cd paperclip-local
+git switch local-harness
+scripts/local/paperclip-local.sh setup
+scripts/local/paperclip-local.sh start
+```
+
+`setup` installiert die Abhängigkeiten und legt die Einstellungsdatei
+`~/.config/paperclip-local/env` an. Danach öffnest du **http://127.0.0.1:3100**.
+
+Beim ersten Start legt Paperclip seine Datenbank in `~/.paperclip` an. Das
+dauert etwa eine Minute. Ob der Server bereit ist:
+
+```sh
+scripts/local/paperclip-local.sh status
+# status=ok profile=local_only version=…
+```
+
+### Als Dienst (startet mit dem Rechner)
+
+```sh
+mkdir -p ~/.config/systemd/user
+cp scripts/local/paperclip-local.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now paperclip-local
+loginctl enable-linger "$USER"        # läuft weiter, wenn du dich abmeldest
+journalctl --user -u paperclip-local -f   # Logs
+```
+
+Liegt der Klon nicht unter `~/dev/paperclip-local`, passe die Pfade in der
+Unit-Datei an.
+
+---
+
+## 4. Einstellungen und Profile
+
+Datei: `~/.config/paperclip-local/env` (Vorlage: `scripts/local/env.example`)
+
+```sh
+PAPERCLIP_DEPLOYMENT_PROFILE=local_only
+HOST=127.0.0.1
+PORT=3100
+```
+
+| Profil | Wann |
+| --- | --- |
+| `local_only` (Standard) | Nur lokale Modelle (llama.cpp, LM Studio). Keine Preise, ein Run zur Zeit. |
+| `local` | Host-Ausführung, aber auch Cloud-Modelle wie Claude oder Codex. Kosten bleiben sichtbar, die Queue ist unbegrenzt, solange du keine Grenze einstellst. |
+| `standard` | Verhalten wie im Original. Unter Linux x64 braucht es dann Rust für den Paperclip Runner. |
+
+`HOST=0.0.0.0` macht die Oberfläche im Netzwerk erreichbar. Mach das nur in
+einem vertrauenswürdigen Netz: Im Standardmodus gibt es keine Anmeldung.
+
+Nach jeder Änderung an der Datei neu starten (`systemctl --user restart
+paperclip-local` oder `start` erneut ausführen).
+
+---
+
+## 5. Im Alltag
+
+### Firma und Projekt anlegen
+
+1. Firma über das Onboarding oder den Firmenumschalter anlegen.
+2. **Projects → Add Project**: Namen eingeben, bei **Project folder** den
+   absoluten Pfad, z. B. `/home/du/projekte/shop`.
+   Der Ordner muss existieren (`mkdir -p /home/du/projekte/shop`) und muss
+   kein Git-Repository sein.
+3. Aufgaben im Projekt anlegen und einem Agent zuweisen. Der Agent arbeitet
+   direkt in diesem Ordner, ohne Kopie und ohne Worktree.
+
+Den Ordner eines bestehenden Projekts änderst du unter Projekt →
+Configuration → Codebase → „Change local folder“.
+
+### Agent-Run-Queue
+
+Settings (Adresse `/company/settings`) → General → Abschnitt
+**Agent run queue**:
+
+- **1 at a time**: richtig, wenn alle Agents denselben llama.cpp- oder
+  LM-Studio-Server nutzen. Parallele Anfragen an einen lokalen Server
+  liefern sonst oft unbrauchbare Antworten.
+- **2 / 4 / 8**: wenn dein Server mehrere Slots sauber bedient.
+- **Profile default / Unlimited**: Profilvorgabe (`local_only`: 1) oder
+  keine Grenze.
+
+Die Grenze gilt für alle Firmen zusammen. Ist ein Run fertig, startet sofort
+der älteste wartende Run, egal von welchem Agent.
+
+### Lokale Modelle mit Pi
+
+1. Einen OpenAI-kompatiblen Server starten:
+   - LM Studio: Modell laden, `lms server start` (Adresse
+     `http://localhost:1234/v1`)
+   - llama.cpp: `llama-server -m modell.gguf --port 8080 -c 32768`
+     (Adresse `http://localhost:8080/v1`)
+
+   Das Modell sollte Tool-Calling zuverlässig beherrschen und mindestens
+   32k Kontext haben. Paperclip schickt lange Anweisungen.
+2. Pi installieren: `npm install -g @earendil-works/pi-coding-agent@0.74.0`
+3. In Paperclip die lokale Verbindung anlegen: beim Onboarding „Pi“ und
+   „Connect LM Studio“ wählen, oder später unter Settings → Connections.
+   Server-Adresse und Modell-ID eintragen. Die Adresse muss auf localhost
+   zeigen.
+4. Einen Pi-Agent mit dieser Verbindung einstellen.
+
+### Paperclip selbst mit Pi im Terminal ändern
+
+```sh
+cd ~/dev/paperclip-local
+scripts/local/paperclip-local.sh dev    # Terminal 1: Server mit Live-Neuladen
+pi                                      # Terminal 2: Pi im Repository
+```
+
+Pi liest `AGENTS.md`. Ganz oben verweist sie auf `AGENTS.local.md` mit den
+zuständigen Dateien, Regeln und schnellen Prüfungen. Nach einer Änderung:
+
+```sh
+pnpm local:check        # Fork-Tests + Typprüfung, ca. 20 Sekunden
+git add -A && git commit -m "…"
+git push origin local-harness
+```
+
+`pnpm build` und `pnpm test:run` brauchst du für kleine Änderungen nicht.
+Der volle Build verlangt Rust und gcc für Pakete, die der lokale Betrieb
+nicht nutzt.
+
+---
+
+## 6. Befehle im Überblick
+
+| Befehl | Zweck |
+| --- | --- |
+| `scripts/local/paperclip-local.sh setup` | Node/pnpm prüfen, Abhängigkeiten installieren |
+| `scripts/local/paperclip-local.sh start` | Server starten (Vordergrund) |
+| `scripts/local/paperclip-local.sh dev` | Server mit Live-Neuladen für Entwicklung |
+| `scripts/local/paperclip-local.sh status` | Zustand und aktives Profil |
+| `scripts/local/paperclip-local.sh stop` | Server stoppen |
+| `scripts/local/paperclip-local.sh check` | Fork-Tests (wie `pnpm local:check`) |
+| `scripts/local/update-from-upstream.sh check` | Neues vom Original anzeigen |
+| `scripts/local/update-from-upstream.sh merge` | Original einmergen |
+
+---
+
+## 7. Fehlerbehebung
+
+| Problem | Lösung |
+| --- | --- |
+| `cargo: not found` beim Start | Das Profil ist `standard`. In `~/.config/paperclip-local/env` `PAPERCLIP_DEPLOYMENT_PROFILE=local_only` setzen. |
+| „Project folder does not exist on this host“ | Ordner anlegen (`mkdir -p …`) und den absoluten Pfad verwenden. |
+| Agent liefert Unsinn | Queue auf „1 at a time“ stellen; Modell mit Tool-Calling und genug Kontext verwenden. |
+| `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH` | `pnpm install --no-frozen-lockfile` (das Setup-Skript macht das automatisch). |
+| Oberfläche nicht erreichbar | `scripts/local/paperclip-local.sh status`; bei Zugriff von einem anderen Rechner `HOST=0.0.0.0`. |
+| Pi-Agent: „model not found“ | Modell-ID in der Verbindung muss exakt der ID im Modellserver entsprechen. |
+
+## 8. Bekannte Grenzen
+
+- In der Agent-Konfiguration steht „Paperclip Runner“ noch als ausgegraute
+  Option. In lokalen Profilen lehnt der Server ihn ab.
+- Der Befehl `background` ist unter WSL unzuverlässig. Dort `start` in
+  einem Terminal oder systemd verwenden.
+- Ein vollständiger Lauf mit Pi gegen ein lokales Modell ist noch nicht
+  automatisiert getestet.
