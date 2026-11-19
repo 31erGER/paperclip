@@ -59,7 +59,7 @@ const providers = [
   {
     id: "local",
     name: "Local endpoint",
-    description: "A model server in the agent’s environment",
+    description: "LM Studio or another local model server",
     advanced: true,
   },
 ] as const;
@@ -108,12 +108,12 @@ export function AiProviderSetup({
   const [allAgentsChoice, setAllAgents] = useState<boolean>();
   const [agentIds, setAgentIds] = useState(new Set(agentId ? [agentId] : []));
   const [protocol, setProtocol] = useState<AiProviderRouting["protocol"]>(
-    reconnect?.routing?.protocol ?? initialProtocol ?? "responses",
+    reconnect?.routing?.protocol ?? initialProtocol ?? (initialProvider === "local" ? "chat" : "responses"),
   );
   const [auth, setAuth] = useState<AiProviderRouting["auth"]>(
-    reconnect?.routing?.auth ?? "bearer",
+    reconnect?.routing?.auth ?? (initialProvider === "local" ? "none" : "bearer"),
   );
-  const [baseUrl, setBaseUrl] = useState(reconnect?.routing?.baseUrl ?? "");
+  const [baseUrl, setBaseUrl] = useState(reconnect?.routing?.baseUrl ?? (initialProvider === "local" ? "http://localhost:1234/v1" : ""));
   const [region, setRegion] = useState(
     reconnect?.routing?.region ?? "us-east-1",
   );
@@ -232,7 +232,11 @@ export function AiProviderSetup({
         setProvider(id as ProviderChoice);
         setStep("connect");
         setApiKey("");
-        setAuth("bearer");
+        setAuth(id === "local" ? "none" : "bearer");
+        if (id === "local") {
+          setBaseUrl("http://localhost:1234/v1");
+          if (!initialProtocol) setProtocol("chat");
+        }
         save.reset();
       }}
     />
@@ -255,7 +259,7 @@ export function AiProviderSetup({
   const accessDefaults = !reconnect ? (
     <ConnectionAccessDefaults
       companyId={companyId}
-      extra={advanced ? modelSettings : undefined}
+      extra={advanced && provider !== "local" ? modelSettings : undefined}
       agents={agents.data ?? []}
       sentence={connectionDefaultSummarySentence({ grantKind: ownership === "shared" ? "organization" : "user", authKind: auth === "none" ? "none" : "api_key", installChoice: allAgents ? "all" : "specific", installCount: agentIds.size })}
       capabilities={{ canCreateOrganizationGrant: canManageConnections, canSetCompanyInstall: canManageConnections }}
@@ -333,7 +337,7 @@ export function AiProviderSetup({
                   aria-label="Provider URL"
                   placeholder={
                     provider === "local"
-                      ? "http://localhost:11434/v1"
+                      ? "http://localhost:1234/v1"
                       : "https://gateway.example.com/v1"
                   }
                   value={baseUrl}
@@ -363,7 +367,7 @@ export function AiProviderSetup({
                       Anthropic Messages · Claude
                     </SelectItem>
                     <SelectItem value="chat">
-                      Chat Completions · OpenCode, Hermes
+                      Chat Completions · OpenCode, Hermes, Pi
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -426,7 +430,7 @@ export function AiProviderSetup({
               </label>
             )
           }
-          {reconnect && <details><summary className="cursor-pointer text-sm text-muted-foreground">Model settings</summary>{modelSettings}</details>}
+          {provider === "local" ? modelSettings : reconnect && <details><summary className="cursor-pointer text-sm text-muted-foreground">Model settings</summary>{modelSettings}</details>}
           <p className="text-xs text-muted-foreground">
             Test the connection with your chosen model in the agent’s execution
             environment after connecting.

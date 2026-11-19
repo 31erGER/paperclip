@@ -1,4 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@paperclipai/shared/privacy-policy", async importOriginal => ({
+  ...await importOriginal<typeof import("@paperclipai/shared/privacy-policy")>(), EXTERNAL_DIAGNOSTICS_ENABLED: true,
+}));
 import { createRequire } from "node:module";
 
 /**
@@ -191,9 +195,9 @@ describe("bootstrapOtel post-gate load failure", () => {
       return {
         ...actual,
         existsSync: (path: unknown) =>
-          String(path).startsWith(FAKE_ROOT) ? true : actual.existsSync(path as never),
+          String(path).replaceAll("\\", "/").startsWith(FAKE_ROOT) ? true : actual.existsSync(path as never),
         readFileSync: (path: unknown, options?: unknown) => {
-          const asString = String(path);
+          const asString = String(path).replaceAll("\\", "/");
           if (asString.startsWith(FAKE_ROOT) && asString.endsWith("package.json")) {
             const name = decodeURIComponent(
               asString.slice(FAKE_ROOT.length + 1, -"/package.json".length),

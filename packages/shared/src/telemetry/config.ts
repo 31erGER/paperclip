@@ -1,4 +1,5 @@
 import type { TelemetryBackoffConfig, TelemetryConfig } from "./types.js";
+import { EXTERNAL_DIAGNOSTICS_ENABLED } from "../privacy-policy.js";
 
 const CI_ENV_VARS = ["CI", "CONTINUOUS_INTEGRATION", "BUILD_NUMBER", "GITHUB_ACTIONS", "GITLAB_CI"];
 
@@ -67,6 +68,7 @@ export function resolveTelemetryConfig(
   fileConfig?: { enabled?: boolean } & TelemetryConfigOverrides,
 ): TelemetryConfig {
   const caps = resolveCaps(fileConfig);
+  if (!EXTERNAL_DIAGNOSTICS_ENABLED) return { enabled: false, ...caps };
 
   if (process.env.PAPERCLIP_TELEMETRY_DISABLED === "1") {
     return { enabled: false, ...caps };

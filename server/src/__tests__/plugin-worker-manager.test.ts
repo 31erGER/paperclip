@@ -57,6 +57,24 @@ const TEST_MANIFEST: PaperclipPluginManifestV1 = {
   entrypoints: { worker: "dist/worker.js" },
 };
 
+it("forces runtime privacy in a real plugin worker while preserving explicit provider access", async () => {
+  const manager = createPluginWorkerManager();
+  try {
+    await manager.startWorker("test.plugin", {
+      entrypointPath: path.join(FIXTURES_DIR, "plugin-worker-privacy.cjs"), manifest: TEST_MANIFEST, config: {},
+      instanceInfo: { instanceId: "instance-1", hostVersion: "1.0.0" }, apiVersion: 1, hostHandlers: {},
+      env: { OTEL_SDK_DISABLED: "false", OTEL_EXPORTER_OTLP_ENDPOINT: "https://diagnostics.invalid/otel", SENTRY_DSN: "https://diagnostics.invalid/1", PI_TELEMETRY: "1",
+        OPENAI_BASE_URL: "https://provider.invalid/v1", OPENAI_API_KEY: "fixture-key", HTTPS_PROXY: "http://proxy.invalid:8080", DISABLE_AUTOUPDATER: "0" },
+    });
+    const result = await manager.call("test.plugin", "health", {});
+    const env = result.details?.env;
+    expect(env).toMatchObject({ OTEL_SDK_DISABLED: "true", OTEL_TRACES_EXPORTER: "none", DO_NOT_TRACK: "1", PI_TELEMETRY: "0",
+      OPENAI_BASE_URL: "https://provider.invalid/v1", OPENAI_API_KEY: "fixture-key", HTTPS_PROXY: "http://proxy.invalid:8080", DISABLE_AUTOUPDATER: "0", PAPERCLIP_PLUGIN_ID: "test.plugin" });
+    expect(env).not.toHaveProperty("SENTRY_DSN");
+    expect(env).not.toHaveProperty("OTEL_EXPORTER_OTLP_ENDPOINT");
+  } finally { await manager.stopAll(); }
+});
+
 describe("worker configuration completion", () => {
   it("notifies only after a successful config callback and releases subscriptions", async () => {
     const manager = createPluginWorkerManager();

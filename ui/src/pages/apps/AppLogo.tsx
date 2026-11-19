@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { loadLocalAppBrandAssets, type LocalAppBrandAssets } from "@/lib/app-brand-assets";
 import { cn } from "@/lib/utils";
+import { canLoadImagePassively } from "@/lib/image-privacy";
 
 const TILE_COLORS = [
   "bg-(--app-logo-tile-1)",
@@ -33,7 +34,7 @@ interface AppLogoProps {
 /**
  * App icon for the gallery and connected-apps surfaces. Renders the manifest
  * official local provider mark when available, including a dark-mode variant.
- * The deterministic letter tile is reserved for runtime image failures.
+ * A deterministic letter tile covers unavailable or privacy-blocked images.
  */
 export function AppLogo({
   name,
@@ -66,10 +67,10 @@ export function AppLogo({
       ? localAssets.dark ?? localAssets.light
       : (allowRemoteFallback ? darkLogoUrl : null)
     : null;
-  const lightLogoUrlForRender = resolvedLogoUrl && !failedLogoUrls.has(resolvedLogoUrl)
+  const lightLogoUrlForRender = resolvedLogoUrl && canLoadImagePassively(resolvedLogoUrl) && !failedLogoUrls.has(resolvedLogoUrl)
     ? resolvedLogoUrl
     : null;
-  const darkLogoUrlForRender = resolvedDarkLogoUrl && !failedLogoUrls.has(resolvedDarkLogoUrl)
+  const darkLogoUrlForRender = resolvedDarkLogoUrl && canLoadImagePassively(resolvedDarkLogoUrl) && !failedLogoUrls.has(resolvedDarkLogoUrl)
     ? resolvedDarkLogoUrl
     : null;
   const hasDistinctThemeLogos = Boolean(

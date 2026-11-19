@@ -37,8 +37,9 @@ import {
   type FeedbackTraceTargetSummary,
   type FeedbackVoteValue,
 } from "@paperclipai/shared";
+import { EXTERNAL_DIAGNOSTICS_ENABLED } from "@paperclipai/shared/privacy-policy";
 import { resolveHomeAwarePath, resolvePaperclipInstanceRoot } from "../home-paths.js";
-import { notFound, unprocessable } from "../errors.js";
+import { forbidden, notFound, unprocessable } from "../errors.js";
 import { agentInstructionsBundleMode, agentInstructionsService } from "./agent-instructions.js";
 import {
   createFeedbackRedactionState,
@@ -1797,6 +1798,7 @@ export function feedbackService(db: Db, options: FeedbackServiceOptions = {}) {
     },
 
     hasPendingFeedbackTraces: async () => {
+      if (!EXTERNAL_DIAGNOSTICS_ENABLED) return false;
       const pending = options.shareClient
         ? or(eq(feedbackExports.status, "pending"), eq(feedbackExports.status, "failed"))
         : eq(feedbackExports.status, "pending");
@@ -1811,6 +1813,12 @@ export function feedbackService(db: Db, options: FeedbackServiceOptions = {}) {
       now?: Date;
       signal?: AbortSignal;
     }) => serializeExportFlush(async () => {
+      if (!EXTERNAL_DIAGNOSTICS_ENABLED) {
+        if (input?.traceId) {
+          throw forbidden("External diagnostics are disabled by this installation's privacy policy.", { code: "external_diagnostics_disabled" });
+        }
+        return { attempted: 0, sent: 0, failed: 0 };
+      }
       const shareClient = options.shareClient;
       input?.signal?.throwIfAborted();
       if (!shareClient) {
@@ -1931,8 +1939,11 @@ export function feedbackService(db: Db, options: FeedbackServiceOptions = {}) {
       authorUserId: string;
       reason?: string | null;
       allowSharing?: boolean;
-    }) =>
-      db.transaction(async (tx) => {
+    }) => {
+      if (!EXTERNAL_DIAGNOSTICS_ENABLED && input.allowSharing === true) {
+        throw forbidden("External diagnostics are disabled by this installation's privacy policy.", { code: "external_diagnostics_disabled" });
+      }
+      return db.transaction(async (tx) => {
         const issue = await tx
           .select({
             id: issues.id,
@@ -2020,7 +2031,7 @@ export function feedbackService(db: Db, options: FeedbackServiceOptions = {}) {
           normalizeInstanceGeneralSettings(currentInstanceSettings?.general),
           getOperatorSettingDefaults(),
         );
-        if (currentInstanceSettings && currentGeneral.feedbackDataSharingPreference === "prompt") {
+        if (EXTERNAL_DIAGNOSTICS_ENABLED && currentInstanceSettings && currentGeneral.feedbackDataSharingPreference === "prompt") {
           const nextSharingPreference = sharedWithLabs ? "allowed" : "not_allowed";
           const currentGeneralRaw = asRecord(currentInstanceSettings.general) ?? {};
           await tx
@@ -2155,6 +2166,7 @@ export function feedbackService(db: Db, options: FeedbackServiceOptions = {}) {
           persistedSharingPreference,
           sharingEnabled: sharedWithLabs,
         };
-      }),
+      });
+    },
   };
 }

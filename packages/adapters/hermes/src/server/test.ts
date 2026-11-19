@@ -14,6 +14,7 @@ import type {
 import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { promisify } from "node:util";
+import { applyChildRuntimePrivacyEnv } from "@paperclipai/adapter-utils/diagnostic-env";
 
 import { HERMES_CLI, DEFAULT_MODEL, ADAPTER_TYPE, VALID_PROVIDERS } from "../shared/constants.js";
 import { detectModel, resolveProvider, inferProviderFromModel } from "./detect-model.js";
@@ -34,7 +35,7 @@ async function checkCliInstalled(
 ): Promise<AdapterEnvironmentCheck | null> {
   try {
     // Try to run the command to see if it exists
-    await execFileAsync(command, ["--version"], { timeout: 10_000 });
+    await execFileAsync(command, ["--version"], { timeout: 10_000, env: applyChildRuntimePrivacyEnv(process.env) });
     return null; // OK — it ran successfully
   } catch (err: unknown) {
     const e = err as NodeJS.ErrnoException;
@@ -58,6 +59,7 @@ async function checkCliVersion(
   try {
     const { stdout } = await execFileAsync(command, ["--version"], {
       timeout: 10_000,
+      env: applyChildRuntimePrivacyEnv(process.env),
     });
     const version = stdout.trim();
     if (version) {
@@ -87,6 +89,7 @@ async function checkPython(): Promise<AdapterEnvironmentCheck | null> {
   try {
     const { stdout } = await execFileAsync("python3", ["--version"], {
       timeout: 5_000,
+      env: applyChildRuntimePrivacyEnv(process.env),
     });
     const version = stdout.trim();
     const match = version.match(/(\d+)\.(\d+)/);
@@ -349,7 +352,7 @@ export async function testEnvironment(
       if (provider && provider !== "auto") args.push("--provider", provider);
       try {
         const { stdout } = await execFileAsync(command, args, {
-          env, cwd: asString(config.cwd), timeout: 45_000, maxBuffer: 1024 * 1024,
+          env: applyChildRuntimePrivacyEnv(env), cwd: asString(config.cwd), timeout: 45_000, maxBuffer: 1024 * 1024,
         });
         if (!/\bhello\b/i.test(stdout)) throw new Error("No hello response");
         checks.push({ level: "info", code: "hermes_hello_probe_passed", message: "Hermes responded through the selected connection." });

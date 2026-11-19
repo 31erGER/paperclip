@@ -1,7 +1,9 @@
 import * as React from "react"
 import { Avatar as AvatarPrimitive } from "radix-ui"
+import { PASSIVE_REMOTE_IMAGES_ENABLED } from "@paperclipai/shared/privacy-policy"
 
 import { cn } from "@/lib/utils"
+import { canLoadImagePassively } from "@/lib/image-privacy"
 import { useAvatarInitials } from "./avatar-initials"
 
 function Avatar({
@@ -30,13 +32,19 @@ function Avatar({
 
 function AvatarImage({
   className,
+  src,
+  srcSet,
   ...props
 }: React.ComponentProps<typeof AvatarPrimitive.Image>) {
+  // Radix preloads before rendering img, so guard before mounting it.
+  if (!canLoadImagePassively(src)) return null
   return (
     <AvatarPrimitive.Image
       data-slot="avatar-image"
       className={cn("aspect-square size-full object-cover", className)}
       {...props}
+      src={src}
+      srcSet={PASSIVE_REMOTE_IMAGES_ENABLED ? srcSet : undefined}
     />
   )
 }

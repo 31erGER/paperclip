@@ -36,6 +36,13 @@ Use `/<company-prefix>/onboarding` to resume an existing company's agent setup;
 the unprefixed route starts at organization naming on self-hosted instances.
 Cloud-managed instances reuse their existing company for agent setup.
 
+Self-hosted first-agent setup also offers Hermes and Pi with **Local model**.
+Use **Connect LM Studio** to save a loopback Chat Completions endpoint (default
+`http://localhost:1234/v1`, no authentication), select its model, then test and
+finish. This path selects the local execution environment and CLI adapter; the
+CLI and LM Studio server must already be available on that host. See
+[local setup](../../doc/connections/AI-CONNECTIONS.md#local-first-company-setup-with-lm-studio).
+
 ### `cli-setup`
 
 Use `paperclipai onboard --help` or `paperclipai run --help` to select an isolated data directory before setup.

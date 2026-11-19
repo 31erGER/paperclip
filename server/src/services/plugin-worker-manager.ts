@@ -24,6 +24,7 @@ import { beginIdleTrackedWork, readTaskDrain, trackIdleWork } from "./task-admis
 import { EventEmitter } from "node:events";
 import { createInterface, type Interface as ReadlineInterface } from "node:readline";
 import type { PaperclipPluginManifestV1 } from "@paperclipai/shared";
+import { applyChildRuntimePrivacyEnv } from "@paperclipai/adapter-utils/diagnostic-env";
 import {
   JSONRPC_VERSION,
   JSONRPC_ERROR_CODES,
@@ -2959,7 +2960,7 @@ export function createPluginWorkerHandle(
     const child = fork(options.entrypointPath, [], {
       stdio: ["pipe", "pipe", "pipe", "ipc"],
       execArgv: options.execArgv ?? [],
-      env: workerEnv,
+      env: applyChildRuntimePrivacyEnv(workerEnv),
       // Don't let the child keep the parent alive
       detached: false,
     });

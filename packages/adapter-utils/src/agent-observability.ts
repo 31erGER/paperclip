@@ -1,4 +1,6 @@
 import type { AgentObservabilityCapture } from "@paperclipai/shared";
+import { EXTERNAL_DIAGNOSTICS_ENABLED } from "@paperclipai/shared/privacy-policy";
+import { applyChildRuntimePrivacyEnv } from "./diagnostic-env.js";
 
 /** Secret-bearing, controller-owned launch material. Never persist or merge into adapter config. */
 export type ProviderObservabilityLaunch = {
@@ -27,7 +29,9 @@ export function encodeObservabilityHeaders(headers: Readonly<Record<string, stri
 
 export function applyObservabilityEnvironment(env: NodeJS.ProcessEnv, launch: ProviderObservabilityLaunch): void {
   for (const name of AGENT_OBSERVABILITY_ENV_KEYS) delete env[name];
-  Object.assign(env, launch.environment);
+  const safeEnv = applyChildRuntimePrivacyEnv({ ...env, ...launch.environment });
+  for (const name of Object.keys(env)) if (!(name in safeEnv)) delete env[name];
+  Object.assign(env, safeEnv);
 }
 
 export function observabilitySecretValues(launch: ProviderObservabilityLaunch | undefined): string[] {
@@ -47,7 +51,8 @@ export function buildProviderObservabilityLaunch(input: {
   compatibilityKey: string; enabled: boolean; capture: AgentObservabilityCapture;
   logsEndpoint?: string; tracesEndpoint?: string; headers?: Readonly<Record<string, string>>;
 }): ProviderObservabilityLaunch {
-  const { enabled, capture, kind, compatibilityKey } = input;
+  const { capture, kind, compatibilityKey } = input;
+  const enabled = EXTERNAL_DIAGNOSTICS_ENABLED && input.enabled;
   const attributes = { "paperclip.company.id": input.companyId, "paperclip.agent.id": input.agentId, "paperclip.observability.revision": input.revision ?? "unconfigured" };
   const environment: Record<string, string> = {
     OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: "3000", OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: "3000",
@@ -58,7 +63,7 @@ export function buildProviderObservabilityLaunch(input: {
       OTEL_EXPORTER_OTLP_TRACES_HEADERS: encodeObservabilityHeaders(input.headers ?? {}),
     });
     const exporter = (endpoint: string | undefined) => enabled ? { "otlp-http": { endpoint, protocol: "binary", headers: {} } } : "none";
-    return { kind, compatibilityKey, environment, otelConfig: {
+    return { kind, compatibilityKey, environment: applyChildRuntimePrivacyEnv(environment), otelConfig: {
       exporter: exporter(input.logsEndpoint), trace_exporter: exporter(input.tracesEndpoint), metrics_exporter: "none",
       log_user_prompt: enabled && capture.userPrompts, log_agent_responses: enabled && capture.assistantResponses,
       log_guardian_assessments: false, tool_result: { max_bytes: enabled && capture.toolContent ? 65536 : 0 },
@@ -81,5 +86,5 @@ export function buildProviderObservabilityLaunch(input: {
     OTEL_EXPORTER_OTLP_TRACES_HEADERS: encodeObservabilityHeaders(input.headers ?? {}),
     OTEL_RESOURCE_ATTRIBUTES: Object.entries(attributes).map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join(","),
   });
-  return { kind, compatibilityKey, environment };
+  return { kind, compatibilityKey, environment: applyChildRuntimePrivacyEnv(environment) };
 }

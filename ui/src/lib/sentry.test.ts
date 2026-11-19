@@ -2,6 +2,10 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+// Retained SDK behavior is reversible through source policy. The separate
+// sentry.privacy.test.ts exercises the shipped policy without this override.
+vi.mock("@paperclipai/shared/privacy-policy", () => ({ EXTERNAL_DIAGNOSTICS_ENABLED: true }));
+
 /**
  * Tests for the browser Sentry gate. Unlike the server gate,
  * `@sentry/browser` is a real development dependency of this package (see

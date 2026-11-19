@@ -1,5 +1,9 @@
 import { gunzipSync } from "node:zlib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@paperclipai/shared/privacy-policy", async importOriginal => ({
+  ...await importOriginal<typeof import("@paperclipai/shared/privacy-policy")>(), EXTERNAL_DIAGNOSTICS_ENABLED: true,
+}));
 import { FEEDBACK_UPLOAD_TIMEOUT_MS, createFeedbackTraceShareClientFromConfig } from "../services/feedback-share-client.js";
 
 describe("feedback trace share client", () => {

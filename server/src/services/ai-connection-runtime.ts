@@ -199,6 +199,7 @@ function managedAiHomeEnvironment(home: string): Record<string, string> {
     GROK_HOME: providerHome,
     CLAUDE_CONFIG_DIR: providerHome,
     HERMES_HOME: providerHome,
+    PI_CODING_AGENT_DIR: providerHome,
   };
 }
 
@@ -376,6 +377,7 @@ export async function prepareManagedAiRuntime(
           : customHeaders;
       }
       if (projected.hermesConfig) await writeFile(path.join(providerHome, "config.yaml"), projected.hermesConfig, { mode: 0o600 });
+      if (projected.piModels) await writeFile(path.join(providerHome, "models.json"), projected.piModels, { mode: 0o600 });
       if (projected.codexConfig) await writeFile(path.join(providerHome, "config.toml"), 'cli_auth_credentials_store = "file"\n' + projected.codexConfig, { mode: 0o600 });
     }
     const attribution = { ...selection.attribution } as typeof selection.attribution & { subscriptionId?: string };

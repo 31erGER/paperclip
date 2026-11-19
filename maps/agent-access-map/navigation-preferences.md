@@ -100,6 +100,10 @@ distinct permission paths.
 
 Capability ID: `navigation-preferences/announcements`.
 
+Fork policy: the production feed stays disabled even if an inherited environment
+requests it; the current-publication path returns no announcement without an
+outbound fetch. Update checking is separate. See [privacy controls](../../doc/PRIVACY-AUDIT.md).
+
 Review: `baseline`.
 
 API: `present` — representative operation IDs:

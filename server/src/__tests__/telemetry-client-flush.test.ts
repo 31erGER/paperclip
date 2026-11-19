@@ -2,6 +2,9 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { TelemetryClient } from "../../../packages/shared/src/telemetry/client.js";
 import type { TelemetryConfig, TelemetryState } from "../../../packages/shared/src/telemetry/types.js";
 
+// Retain upstream transport coverage. Shared privacy tests use the actual gate.
+vi.mock("@paperclipai/shared/privacy-policy", () => ({ EXTERNAL_DIAGNOSTICS_ENABLED: true }));
+
 function makeClient(config?: Partial<TelemetryConfig>) {
   const merged: TelemetryConfig = { enabled: true, endpoint: "http://localhost:9999/ingest", ...config };
   const state: TelemetryState = {

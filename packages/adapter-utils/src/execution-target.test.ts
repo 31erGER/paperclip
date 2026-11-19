@@ -38,6 +38,17 @@ describe("runAdapterExecutionTargetShellCommand", () => {
     vi.unstubAllEnvs();
   });
 
+  it("hardens explicit diagnostics on the remote shell launch boundary", async () => {
+    const runSshCommand = vi.spyOn(ssh, "runSshCommand").mockResolvedValue({ stdout: "", stderr: "" });
+    await runAdapterExecutionTargetShellCommand("privacy-shell", sshExecutionTarget(), "pi --version", {
+      cwd: "/local", env: { OTEL_EXPORTER_OTLP_ENDPOINT: "https://diagnostics.invalid/otel", SENTRY_DSN: "https://diagnostics.invalid/1", PI_TELEMETRY: "1", OPENAI_API_KEY: "fixture-key" },
+    });
+    const env = runSshCommand.mock.calls[0]![2]!.env;
+    expect(env).toMatchObject({ OTEL_SDK_DISABLED: "true", PI_TELEMETRY: "0", OPENAI_API_KEY: "fixture-key" });
+    expect(env).not.toHaveProperty("OTEL_EXPORTER_OTLP_ENDPOINT");
+    expect(env).not.toHaveProperty("SENTRY_DSN");
+  });
+
   it("quotes remote shell commands with the shared SSH quoting helper", async () => {
     const runSshCommandSpy = vi.spyOn(ssh, "runSshCommand").mockResolvedValue({
       stdout: "",
@@ -95,9 +106,9 @@ describe("runAdapterExecutionTargetShellCommand", () => {
       expect.any(Object),
       expect.any(String),
       expect.objectContaining({
-        env: {
+        env: expect.objectContaining({
           SAFE_VALUE: "visible",
-        },
+        }),
       }),
     );
   });
@@ -188,6 +199,25 @@ describe("runAdapterExecutionTargetProcess", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+  });
+
+  it("forces runtime privacy at the sandbox runner boundary while preserving provider access", async () => {
+    const execute = vi.fn(async (input: { env?: Record<string, string> }) => ({
+      exitCode: 0, signal: null, timedOut: false, stdout: JSON.stringify(input.env), stderr: "", pid: null, startedAt: null,
+    }));
+    const result = await runAdapterExecutionTargetProcess("privacy-sandbox", {
+      kind: "remote", transport: "sandbox", remoteCwd: "/workspace", runner: { execute },
+    }, "pi", [], {
+      cwd: "/local", timeoutSec: 10, graceSec: 1, onLog: async () => {}, env: {
+        OTEL_SDK_DISABLED: "false", OTEL_EXPORTER_OTLP_ENDPOINT: "https://diagnostics.invalid/otel", SENTRY_DSN: "https://diagnostics.invalid/1", PI_TELEMETRY: "1",
+        OPENAI_BASE_URL: "https://provider.invalid/v1", OPENAI_API_KEY: "fixture-key", HTTPS_PROXY: "http://proxy.invalid:8080", PI_SKIP_VERSION_CHECK: "0",
+      },
+    });
+    const env = JSON.parse(result.stdout);
+    expect(env).toMatchObject({ OTEL_SDK_DISABLED: "true", OTEL_TRACES_EXPORTER: "none", PI_TELEMETRY: "0", DO_NOT_TRACK: "1",
+      OPENAI_BASE_URL: "https://provider.invalid/v1", OPENAI_API_KEY: "fixture-key", HTTPS_PROXY: "http://proxy.invalid:8080", PI_SKIP_VERSION_CHECK: "0" });
+    expect(env).not.toHaveProperty("SENTRY_DSN");
+    expect(env).not.toHaveProperty("OTEL_EXPORTER_OTLP_ENDPOINT");
   });
 
   it.each([true, false, undefined])("preserves the sandbox session choice %s and command outcome", async (useSession) => {
@@ -303,7 +333,7 @@ describe("ensureAdapterExecutionTargetRuntimeCommandInstalled", () => {
       command: "sh",
       args: ["-c", "npm install -g @google/gemini-cli"],
       cwd: "/remote/workspace",
-      env: { PATH: "/usr/bin" },
+      env: expect.objectContaining({ PATH: "/usr/bin", OTEL_SDK_DISABLED: "true", DO_NOT_TRACK: "1" }),
       timeoutMs: 30_000,
     }));
   });

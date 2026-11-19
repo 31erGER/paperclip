@@ -41,6 +41,19 @@ const SAMPLE_FINGERPRINT_IDENTITY: SessionFingerprintIdentity = {
 };
 
 describe("acpx identity split and launch environment", () => {
+  it.each([true, false])("forces runtime privacy after configured and contributed env with host inheritance %s", inheritHostEnvironment => {
+    const launch = finalizeLaunchEnvironment({
+      PI_TELEMETRY: "1", OTEL_SDK_DISABLED: "false", OPENAI_BASE_URL: "https://provider.invalid/v1", OPENAI_API_KEY: "fixture-key", HTTPS_PROXY: "http://proxy.invalid:8080",
+    }, [{ scope: "session", env: { OTEL_EXPORTER_OTLP_ENDPOINT: "https://diagnostics.invalid/otel", SENTRY_DSN: "https://diagnostics.invalid/1", PI_TELEMETRY: "1" } }], {
+      acpxAgent: "codex", inheritHostEnvironment, inheritedEnv: { OTEL_TRACES_EXPORTER: "otlp", PI_TELEMETRY: "1" },
+    });
+    expect(launch.env).toMatchObject({ OTEL_SDK_DISABLED: "true", OTEL_TRACES_EXPORTER: "none", PI_TELEMETRY: "0", DO_NOT_TRACK: "1",
+      OPENAI_BASE_URL: "https://provider.invalid/v1", OPENAI_API_KEY: "fixture-key", HTTPS_PROXY: "http://proxy.invalid:8080" });
+    expect(launch.env).not.toHaveProperty("SENTRY_DSN");
+    expect(launch.env).not.toHaveProperty("OTEL_EXPORTER_OTLP_ENDPOINT");
+    expect(Object.isFrozen(launch.env)).toBe(true);
+  });
+
   it("test_fingerprint_builder_accepts_only_session_fingerprint_identity", () => {
     // The builder accepts a fingerprint identity and returns a stable hash.
     const first = buildSessionFingerprint(SAMPLE_FINGERPRINT_IDENTITY);
@@ -234,7 +247,7 @@ describe("acpx identity split and launch environment", () => {
       },
     );
 
-    expect(launchEnvironment.env).toEqual({ PATH: "/sandbox/bin" });
+    expect(launchEnvironment.env).toMatchObject({ PATH: "/sandbox/bin" });
   });
 
   it("lets explicit Windows env values suppress differently-cased ambient values", () => {
@@ -255,9 +268,11 @@ describe("acpx identity split and launch environment", () => {
       },
     );
 
-    expect(launchEnvironment.env).toEqual({
+    expect(launchEnvironment.env).toMatchObject({
       openai_api_key: "",
       Path: "C:\\explicit\\bin",
     });
+    expect(launchEnvironment.env).not.toHaveProperty("OPENAI_API_KEY");
+    expect(launchEnvironment.env).not.toHaveProperty("PATH");
   });
 });

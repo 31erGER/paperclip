@@ -10,6 +10,7 @@ import type {
 } from "./types.js";
 import { type ResolvedTelemetryCaps, resolveCaps } from "./config.js";
 import { PAPERCLIP_EVENTS } from "./generated/paperclip-telemetry.js";
+import { EXTERNAL_DIAGNOSTICS_ENABLED } from "../privacy-policy.js";
 
 const DEFAULT_ENDPOINTS = [
   "https://telemetry.paperclip.ing/ingest",
@@ -104,7 +105,7 @@ export class TelemetryClient {
     // a seeded function for deterministic backoff. Callers keep the 3-arg form.
     random: () => number = Math.random,
   ) {
-    this.config = config;
+    this.config = { ...config, enabled: EXTERNAL_DIAGNOSTICS_ENABLED && config.enabled };
     this.caps = resolveCaps(config);
     this.stateFactory = stateFactory;
     this.version = version;
@@ -452,7 +453,7 @@ export class TelemetryClient {
   }
 
   startPeriodicFlush(intervalMs: number = 60_000): void {
-    if (this.flushInterval) return;
+    if (!this.config.enabled || this.flushInterval) return;
     this.flushInterval = setInterval(() => {
       void this.flush();
     }, intervalMs);
@@ -474,6 +475,7 @@ export class TelemetryClient {
   }
 
   hashPrivateRef(value: string): string {
+    if (!this.config.enabled) return "disabled";
     const state = this.getState();
     return createHash("sha256")
       .update(state.salt + value)

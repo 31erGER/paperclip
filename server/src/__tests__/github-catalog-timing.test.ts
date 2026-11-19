@@ -8,6 +8,10 @@ import {
 } from "@paperclipai/db";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@paperclipai/shared/privacy-policy", async importOriginal => ({
+  ...await importOriginal<typeof import("@paperclipai/shared/privacy-policy")>(), EXTERNAL_DIAGNOSTICS_ENABLED: true,
+}));
 import { writeConnectionCredential } from "../services/connection-credentials.js";
 import { syncConnectionCredentialBindings } from "../services/connection-credential-bindings.js";
 import { withRunExecutionTiming } from "../services/execution-preparation-timing.js";

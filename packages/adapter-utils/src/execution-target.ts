@@ -83,6 +83,7 @@ import {
   type TerminalResultCleanupOptions,
 } from "./server-utils.js";
 import { sanitizeRemoteExecutionEnv } from "./remote-execution-env.js";
+import { applyChildRuntimePrivacyEnv } from "./diagnostic-env.js";
 import { preferredShellForSandbox, shellCommandArgs } from "./sandbox-shell.js";
 import {
   runWithRuntimeParent,
@@ -872,7 +873,7 @@ export async function runAdapterExecutionTargetProcess(
 ): Promise<RunProcessResult> {
   if (target?.kind === "remote" && target.transport === "sandbox") {
     const runner = requireSandboxRunner(target);
-    const env = sanitizeRemoteExecutionEnv(options.env);
+    const env = applyChildRuntimePrivacyEnv(sanitizeRemoteExecutionEnv(options.env));
     await options.onRuntimeProgress?.({
       phase: "adapter_startup",
       message: "Starting adapter in environment",
@@ -956,7 +957,7 @@ export async function runAdapterExecutionTargetShellCommand(
   const onLog = options.onLog ?? (async () => {});
   if (target?.kind === "remote") {
     const startedAt = new Date().toISOString();
-    const env = sanitizeRemoteExecutionEnv(options.env);
+    const env = applyChildRuntimePrivacyEnv(sanitizeRemoteExecutionEnv(options.env));
     if (target.transport === "ssh") {
       try {
         // Pass the raw command — `runSshCommand` owns profile sourcing and

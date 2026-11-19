@@ -1,6 +1,8 @@
 // Optional Sentry error monitoring for the browser.
 //
-// Activated only when the signed-in session carries a Sentry DSN. `SentryGate`
+// Disabled by the fork privacy policy, including stale session DSNs. The
+// retained opt-in implementation runs only if that source policy is changed.
+// When permitted, activated only when the signed-in session carries a Sentry DSN. `SentryGate`
 // reads the DSN off `GET /api/auth/get-session` and calls
 // `initBrowserErrorMonitoring` once. A signed-out browser, or a browser with
 // no DSN, calls this module never — see `SentryGate.tsx`.
@@ -38,6 +40,7 @@
 // (`GlobalHandlers`), the two React error boundaries, deduplicates a repeat
 // event (`Dedupe`), and links a caused-by chain (`LinkedErrors`).
 
+import { EXTERNAL_DIAGNOSTICS_ENABLED } from "@paperclipai/shared/privacy-policy";
 import {
   buildBrowserErrorContext,
   classifyRejectionReason,
@@ -76,6 +79,7 @@ let sentry: SentryBrowserModule | null = null;
  * a no-op because a client is already started.
  */
 export function initBrowserErrorMonitoring(dsn: string, environment?: string | null): Promise<void> {
+  if (!EXTERNAL_DIAGNOSTICS_ENABLED) return Promise.resolve();
   return enqueue(async () => {
     if (sentry) return;
     try {
@@ -151,6 +155,7 @@ export function teardownBrowserErrorMonitoring(): Promise<void> {
  * DSN on the session), or when bootstrap failed.
  */
 export function captureBrowserException(error: unknown, details?: BrowserErrorDetails): void {
+  if (!EXTERNAL_DIAGNOSTICS_ENABLED) return;
   let context: ReturnType<typeof buildBrowserErrorContext> | undefined;
   try {
     if (details) context = buildBrowserErrorContext(details);

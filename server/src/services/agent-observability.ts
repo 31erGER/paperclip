@@ -7,7 +7,8 @@ import {
   isSameOtlpOrigin,
   type AgentObservabilitySettings, type AgentObservabilityTestReceipt, type UpdateAgentObservabilityRequest, type AgentObservabilityUnavailableReason,
 } from "@paperclipai/shared";
-import { conflict, notFound, unprocessable } from "../errors.js";
+import { EXTERNAL_DIAGNOSTICS_ENABLED } from "@paperclipai/shared/privacy-policy";
+import { conflict, forbidden, notFound, unprocessable } from "../errors.js";
 import { withAccountingTransaction } from "./accounting-transaction.js";
 import { logActivity } from "./activity-log.js";
 import { secretService } from "./secrets.js";
@@ -146,9 +147,12 @@ export function agentObservabilityService(db: Db) {
         details: { revision: row.revision } }, publications);
     })),
     resolve: async (companyId: string, options: ResolutionAccess & { forTest?: boolean; expectedRevision?: string; unavailableReason?: AgentObservabilityUnavailableReason } = {}): Promise<ResolvedAgentObservability> => {
+      if (!EXTERNAL_DIAGNOSTICS_ENABLED && options.forTest) {
+        throw forbidden("External diagnostics are disabled by this installation's privacy policy.", { code: "external_diagnostics_disabled" });
+      }
       const row = await getRow(companyId);
       if (options.expectedRevision) { if (!row) throw notFound("Agent observability is not configured"); assertRevision(row, options.expectedRevision); }
-      if (!row || (!row.enabled && !options.forTest)) return { state: "disabled", revision: row?.revision ?? null, compatibilityKey: identity(companyId, row?.revision ?? null, "disabled") };
+      if (!EXTERNAL_DIAGNOSTICS_ENABLED || !row || (!row.enabled && !options.forTest)) return { state: "disabled", revision: row?.revision ?? null, compatibilityKey: identity(companyId, row?.revision ?? null, "disabled") };
       const unavailable = (reason: AgentObservabilityUnavailableReason) => unavailableAgentObservability(companyId, reason, row.revision);
       if (options.unavailableReason) return unavailable(options.unavailableReason);
       let destination: AgentObservabilitySettings["destination"], capture: AgentObservabilitySettings["capture"];

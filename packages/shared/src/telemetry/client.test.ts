@@ -3,6 +3,9 @@ import { TelemetryClient } from "./client.js";
 import { resolveTelemetryConfig } from "./config.js";
 import type { TelemetryConfig, TelemetryDimensions, TelemetryState } from "./types.js";
 
+// Retain upstream transport coverage. privacy.test.ts uses the actual policy.
+vi.mock("../privacy-policy.js", () => ({ EXTERNAL_DIAGNOSTICS_ENABLED: true }));
+
 const CONTRACT_KEYS = new Set(["app", "schemaVersion", "installId", "version", "events", "batchId"]);
 
 const TEST_STATE: TelemetryState = {

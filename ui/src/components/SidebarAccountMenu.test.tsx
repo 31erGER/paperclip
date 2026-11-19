@@ -158,6 +158,26 @@ describe("SidebarAccountMenu", () => {
   describe.each([SidebarAccountMenu, ProductionSidebarAccountMenu])("staging commit (%#)", (AccountMenu) => {
     const commit = "8751e2de4626ff5e7355fe28b30509991cfff920";
 
+    it("uses initials without requesting the external session avatar", async () => {
+      const imageSource = vi.spyOn(HTMLImageElement.prototype, "src", "set");
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const root = createRoot(container);
+      try {
+        await act(async () => root.render(
+          <QueryClientProvider client={queryClient}>
+            <TooltipProvider><AccountMenu open /></TooltipProvider>
+          </QueryClientProvider>,
+        ));
+        await flushReact();
+        expect(imageSource.mock.calls.some(([src]) => src === "https://example.com/jane.png")).toBe(false);
+        expect(container.querySelector('[data-slot="avatar-fallback"]')?.textContent).toBe("JE");
+      } finally {
+        await act(() => root.unmount());
+        queryClient.clear();
+        imageSource.mockRestore();
+      }
+    });
+
     it.each([
       ["paperclip.staging.paperclip.app", true],
       ["another.staging.paperclip.app", true],

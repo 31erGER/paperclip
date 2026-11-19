@@ -2,6 +2,8 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { ProtobufLogsSerializer, ProtobufTraceSerializer } from "@opentelemetry/otlp-transformer";
 import type { AgentObservabilityTestReceipt, OtlpSignalTestResult } from "@paperclipai/shared";
+import { EXTERNAL_DIAGNOSTICS_ENABLED } from "@paperclipai/shared/privacy-policy";
+import { forbidden } from "../errors.js";
 import { guardedRemoteHttpFetch } from "./remote-http-fetch.js";
 import type { ResolvedAgentObservability } from "./agent-observability.js";
 
@@ -43,6 +45,9 @@ export async function testAgentObservability(input: {
   companyId: string; revision: string; resolved: ResolvedAgentObservability;
   allowPrivateNetwork: boolean; timeoutMs?: number;
 }): Promise<AgentObservabilityTestReceipt> {
+  if (!EXTERNAL_DIAGNOSTICS_ENABLED) {
+    throw forbidden("External diagnostics are disabled by this installation's privacy policy.", { code: "external_diagnostics_disabled" });
+  }
   const startedAt = new Date().toISOString();
   const marker = `paperclip-observability-test-${randomUUID()}`;
   const traceId = randomBytes(16).toString("hex"), spanId = randomBytes(8).toString("hex");

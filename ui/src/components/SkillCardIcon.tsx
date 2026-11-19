@@ -1,4 +1,5 @@
 import { skillAccentColor } from "@/lib/skill-create";
+import { canLoadImagePassively } from "@/lib/image-privacy";
 
 /**
  * Minimal shape needed to render a skill's square icon. `DiscoveryCard`
@@ -14,7 +15,7 @@ export interface SkillIconCard {
 }
 
 export function SkillCardIcon({ card, size = 36 }: { card: SkillIconCard; size?: number }) {
-  if (card.iconUrl) {
+  if (card.iconUrl && canLoadImagePassively(card.iconUrl)) {
     return (
       <img
         src={card.iconUrl}

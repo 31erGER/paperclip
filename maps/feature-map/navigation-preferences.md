@@ -29,6 +29,10 @@ Use starred/recent/sidebar links and direct company-prefixed URLs.
 
 ### `profile-announcements`
 
+Fork policy: remote avatars use initials; local/embedded avatars remain visible.
+The hosted news feed is disabled by `BACKGROUND_ANNOUNCEMENTS_ENABLED = false`.
+Update checks remain available. See [privacy controls](../../doc/PRIVACY-AUDIT.md).
+
 Use Settings → Profile, `/u/:userSlug`, and the announcement well when a publication is available.
 
 ### `palette-shortcuts`

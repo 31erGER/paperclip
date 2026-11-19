@@ -1043,6 +1043,8 @@ describe("managed AI connections", () => {
     ["openai", "codex_local", "responses"],
     ["anthropic", "claude_local", "messages"],
     ["openai", "opencode_local", "chat"],
+    ["openai", "pi_local", "chat"],
+    ["openai", "hermes_local", "chat"],
   ] as const)("prepares a no-auth %s endpoint without a vault secret", async (provider, adapterType, protocol) => {
     const account = await service.save(companyId, "alice", {
       provider, method: "api_key", ownership: "personal", name: `No-auth ${adapterType}`,
@@ -1057,6 +1059,12 @@ describe("managed AI connections", () => {
       expect(first.sessionIdentity).toBe(second.sessionIdentity);
       expect(first.sessionIdentity).toContain("no-auth");
       expect(JSON.stringify(first.config)).not.toContain("host-key");
+      if (adapterType === "pi_local") {
+        const piHome = (first.config.env as Record<string, string>).PI_CODING_AGENT_DIR;
+        expect(JSON.parse(await readFile(path.join(piHome, "models.json"), "utf8"))).toMatchObject({ providers: { paperclip: {
+          baseUrl: "http://127.0.0.1:9000/v1", api: "openai-completions", apiKey: "local-no-auth", models: [{ id: "fixture-model" }],
+        } } });
+      }
       const [grant] = await db.select().from(connectionGrants).where(eq(connectionGrants.id, account.grantId));
       expect(grant.credentialSecretRefs).toEqual([]);
     } finally { await Promise.all([first.cleanup(), second.cleanup()]); }
