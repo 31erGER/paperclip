@@ -564,6 +564,15 @@ Evidence: `verified` — [route](../../server/src/routes/ai-connections.ts) and 
 Verification: `passed` — production native call_api with actual run JWT and a deterministic browser-login process returns device URL/code inline, encrypts the mutation receipt, replays exactly, redacts history, and creates no runner response asset. Login start/check/cancel use the real service and persisted addressed-user attempt.
 Gaps: The browser process is a fixture; no real provider consent, CLI credentials or live setup is qualified.
 
+### `post-companies-ai-connections-local-models`
+
+API: `present` — `POST /api/companies/{companyId}/ai-connections/local-models`; JSON REST. Fork 31erGER.
+Agent access: `operator-only` — board only (`assertBoard`); agents receive 403.
+Policy: board actor with company access. Read-only: asks a loopback OpenAI-compatible server (LM Studio, llama.cpp) for `GET /models` and, best effort, LM Studio's `/api/v0/models`; returns model IDs only. Non-loopback URLs and redirects are refused.
+Evidence: `verified` — [route](../../server/src/routes/ai-connections.ts), [service](../../server/src/services/local-model-discovery.ts) and [service tests](../../server/src/services/local-model-discovery.test.ts).
+Verification: `passed` — service tests with a fake fetch; live call against a fake LM Studio on the local assembled server (models listed, embeddings dropped, unreachable / 404 / non-loopback errors).
+Gaps: No live check against a real LM Studio or llama.cpp build.
+
 ### `delete-companies-ai-connections-local-attempts`
 
 API: `present` — `DELETE /api/companies/{companyId}/ai-connections/local/attempts/{sessionId}`; JSON REST.

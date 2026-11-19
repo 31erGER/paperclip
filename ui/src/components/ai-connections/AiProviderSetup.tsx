@@ -12,6 +12,7 @@ import {
 import { aiConnectionsApi } from "@/api/ai-connections";
 import { agentsApi } from "@/api/agents";
 import { describeError } from "@/api/errors";
+import { LocalModelPicker } from "./LocalModelPicker";
 import { QueryErrorState, useQueryView } from "@/components/QueryView";
 import { ConnectionChoiceList } from "@/features/connections/ConnectionChoiceList";
 import { ConnectionAccessDefaults, connectionDefaultSummarySentence } from "@/features/connections/ConnectionSetupFlow";
@@ -248,6 +249,18 @@ export function AiProviderSetup({
     />
   );
   const modelSettings = (
+    <div className="space-y-3">
+    {/* Fork 31erGER: list the local server's models instead of typing IDs. */}
+    {provider === "local" && !reconnect ? (
+      <LocalModelPicker
+        companyId={companyId}
+        baseUrl={baseUrl}
+        apiKey={auth !== "none" ? apiKey : undefined}
+        value={models}
+        onChange={setModels}
+        disabled={save.isPending}
+      />
+    ) : null}
     <label className="block space-y-2 text-xs text-muted-foreground">
       Model IDs (comma separated)
       <Input
@@ -261,6 +274,7 @@ export function AiProviderSetup({
         also enter one on the agent.
       </span>
     </label>
+    </div>
   );
   const accessDefaults = !reconnect ? (
     <ConnectionAccessDefaults

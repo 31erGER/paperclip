@@ -10,7 +10,9 @@ import { aiProviderSetupPreset } from "@paperclipai/shared";
 import type { AiConnectionCredentialStep } from "./AiConnectionCredentialStep";
 
 let credentialProps: ComponentProps<typeof AiConnectionCredentialStep> | undefined;
-vi.mock("@/api/ai-connections", () => ({ aiConnectionsApi: { create: vi.fn(async () => ({ connectionId: "connection", grantId: "grant" })), list: vi.fn(async () => ({ currentUserId: "owner", connections: [], canManageConnections: true })) } }));
+// Radix checkboxes inside a form measure themselves; jsdom has no ResizeObserver.
+globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver;
+vi.mock("@/api/ai-connections", () => ({ aiConnectionsApi: { create: vi.fn(async () => ({ connectionId: "connection", grantId: "grant" })), list: vi.fn(async () => ({ currentUserId: "owner", connections: [], canManageConnections: true })), discoverLocalModels: vi.fn(async () => ({ baseUrl: "http://localhost:1234/v1", source: "openai", models: [] })) } }));
 vi.mock("@/api/agents", () => ({ agentsApi: { list: vi.fn(async () => []) } }));
 vi.mock("./AiConnectionCredentialStep", () => ({ AiConnectionCredentialStep: (props: ComponentProps<typeof AiConnectionCredentialStep>) => { credentialProps = props; return <div>Existing credential flow</div>; } }));
 
@@ -50,6 +52,48 @@ it("saves LM Studio with a loopback endpoint and no API key", async () => {
     expect(vi.mocked(aiConnectionsApi.create).mock.lastCall?.[1]).not.toHaveProperty("apiKey");
   } finally { await act(async () => root.unmount()); client.clear(); }
 });
+// Fork 31erGER: model IDs come from the local server instead of being typed.
+it("lists the local server's models, preselects loaded ones and saves the chosen IDs", async () => {
+  vi.mocked(aiConnectionsApi.discoverLocalModels).mockResolvedValue({
+    baseUrl: "http://localhost:1234/v1", source: "lmstudio",
+    models: [{ id: "qwen3-coder-30b", type: "llm", loaded: true }, { id: "gemma-3-12b", type: "llm", loaded: false }],
+  });
+  vi.mocked(aiConnectionsApi.create).mockClear();
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+  client.setQueryData(["ai-connections", "company", undefined], { canManageConnections: true, connections: [] });
+  client.setQueryData(["agents", "company", "provider-access"], []);
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<QueryClientProvider client={client}><TooltipProvider><AiProviderSetup companyId="company" initialProvider="local" initialProtocol="chat" providerLabel="LM Studio" onCancel={() => {}} onComplete={() => {}} /></TooltipProvider></QueryClientProvider>));
+    await vi.waitFor(() => expect(container.querySelector('[aria-label="Available models"]')).toBeTruthy(), { timeout: 3000 });
+    expect(aiConnectionsApi.discoverLocalModels).toHaveBeenCalledWith("company", { baseUrl: "http://localhost:1234/v1" });
+    const modelIds = container.querySelector('input[aria-label="Model IDs"]') as HTMLInputElement;
+    await vi.waitFor(() => expect(modelIds.value).toBe("qwen3-coder-30b"));
+    expect(container.textContent).toContain("loaded");
+    await act(async () => (container.querySelector('button[aria-label="gemma-3-12b"]') as HTMLButtonElement).click());
+    expect(modelIds.value).toBe("qwen3-coder-30b, gemma-3-12b");
+    await act(async () => container.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+    expect(aiConnectionsApi.create).toHaveBeenCalledWith("company", expect.objectContaining({
+      routing: expect.objectContaining({ kind: "local", models: [{ id: "qwen3-coder-30b" }, { id: "gemma-3-12b" }] }),
+    }));
+  } finally { await act(async () => root.unmount()); client.clear(); }
+});
+
+it("shows why the local server could not be asked", async () => {
+  vi.mocked(aiConnectionsApi.discoverLocalModels).mockRejectedValue(new Error("Could not reach a model server at http://localhost:1234/v1."));
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+  client.setQueryData(["ai-connections", "company", undefined], { canManageConnections: true, connections: [] });
+  client.setQueryData(["agents", "company", "provider-access"], []);
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<QueryClientProvider client={client}><TooltipProvider><AiProviderSetup companyId="company" initialProvider="local" initialProtocol="chat" providerLabel="LM Studio" onCancel={() => {}} onComplete={() => {}} /></TooltipProvider></QueryClientProvider>));
+    await vi.waitFor(() => expect(container.querySelector('[role="alert"]')?.textContent).toContain("Could not reach a model server"), { timeout: 3000 });
+    expect((container.querySelector('input[aria-label="Model IDs"]') as HTMLInputElement).disabled).toBe(false);
+  } finally { await act(async () => root.unmount()); client.clear(); }
+});
+
 it("shows advanced providers directly when entered from advanced connection mode", async () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   client.setQueryData(["ai-connections", "company", undefined], { canManageConnections: true, connections: [] });

@@ -12,7 +12,7 @@
     "dev:list": "pnpm --filter @paperclipai/server exec tsx ../scripts/dev-service.ts list",
     "dev:stop": "pnpm --filter @paperclipai/server exec tsx ../scripts/dev-service.ts stop",
     "local:start": "bash paperclip-local.sh start",
-    "local:check": "vitest run packages/shared/src/deployment-profile.test.ts server/src/lib/deployment-profile.test.ts server/src/services/heartbeat/instance-run-slots.test.ts && pnpm --filter @paperclipai/shared exec tsc --noEmit",
+    "local:check": "vitest run packages/shared/src/deployment-profile.test.ts server/src/lib/deployment-profile.test.ts server/src/services/heartbeat/instance-run-slots.test.ts server/src/services/local-model-discovery.test.ts && pnpm --filter @paperclipai/shared exec tsc --noEmit",
     "dev:server": "pnpm --filter @paperclipai/server dev",
     "dev:ui": "pnpm --filter @paperclipai/ui dev",
     "dev:mobile": "pnpm --filter @paperclipai/ui build && pnpm --filter @paperclipai/ui preview",

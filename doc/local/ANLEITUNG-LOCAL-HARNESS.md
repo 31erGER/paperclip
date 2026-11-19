@@ -191,8 +191,11 @@ der älteste wartende Run, egal von welchem Agent.
    **Hermes** an (unter `local_only` an erster Stelle). Pi wählen, dann
    **Connect LM Studio**: Die Adresse ist mit `http://localhost:1234/v1`
    vorbelegt, ein API-Schlüssel ist nicht nötig. Für llama.cpp die Adresse
-   anpassen (z. B. `http://localhost:8080/v1`). **Save connection**, Modell
-   wählen, **Connect**. Der Agent läuft in der lokalen Umgebung, ohne
+   anpassen (z. B. `http://localhost:8080/v1`). Paperclip fragt den Server
+   nach seinen Modellen und zeigt sie als Liste („Models on the server“). Bei
+   LM Studio sind Embedding-Modelle ausgeblendet und geladene Modelle markiert
+   und vorausgewählt. Modelle anhaken statt IDs tippen, **Save connection**,
+   Modell wählen, **Connect**. Der Agent läuft in der lokalen Umgebung, ohne
    Cloud-Konto.
 4. **Weitere Agents:** Agents → **Add agent** → **Pi**, Modellquelle
    **Local** wählen und dieselbe lokale Verbindung verwenden.
@@ -277,6 +280,8 @@ Einstellungsdatei nutzt Paperclip eine zweite, getrennte Instanz unter
 | `cargo: not found` beim Start | Das Profil ist `standard`. In `~/.config/paperclip-local/env` `PAPERCLIP_DEPLOYMENT_PROFILE=local_only` setzen. |
 | „Project folder does not exist on this host“ | Ordner anlegen (`mkdir -p …`) und den absoluten Pfad verwenden. |
 | Agent liefert Unsinn | Queue auf „1 at a time“ stellen; Modell mit Tool-Calling und genug Kontext verwenden. |
+| Modellliste: „Could not reach a model server“ | Modellserver starten (`lms server start` bzw. `llama-server`), dann „Reload models“. |
+| Modellliste: „answered HTTP 404“ | Die Adresse endet meist auf `/v1`, z. B. `http://localhost:1234/v1`. |
 | `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH` | `pnpm install --no-frozen-lockfile` (das Setup-Skript macht das automatisch). |
 | Oberfläche nicht erreichbar | `./paperclip-local.sh status`. Von einem anderen Rechner per SSH-Tunnel zugreifen (Abschnitt 4). |
 | „Board access required“ im Browser | Der Browser läuft nicht auf dem Paperclip-Rechner (oder unter WSL im Windows-Browser). SSH-Tunnel oder Modus mit Anmeldung verwenden (Abschnitt 4). |

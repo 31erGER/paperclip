@@ -35,6 +35,8 @@ import { logActivity } from "../services/activity-log.js";
 import { aiConnectionRouterService } from "../services/ai-connection-router.js";
 import { aiConnectionService } from "../services/ai-connections.js";
 import { validate } from "../middleware/validate.js";
+import { discoverLocalModels } from "../services/local-model-discovery.js";
+import { localModelDiscoveryRequestSchema } from "@paperclipai/shared";
 import { probeCopilotConnection } from "../services/copilot-connection-probe.js";
 import type { PluginWorkerManager } from "../services/plugin-worker-manager.js";
 
@@ -183,6 +185,16 @@ export function aiConnectionRoutes(db: Db, options: Parameters<typeof supportsLo
     const poolId = z.string().uuid().parse(req.params.poolId);
     const { expectedRevision } = z.object({ expectedRevision: z.number().int().positive() }).strict().parse(req.body);
     res.json(await pools.remove(companyId, poolId, expectedRevision, responsibleUserForAiRequest(req)!, connectionRequestContext(req)));
+  });
+  // Fork 31erGER: list the models of a local model server (LM Studio,
+  // llama.cpp) on this host, so the board picks model IDs instead of typing
+  // them. Read-only; loopback URLs only.
+  router.post("/companies/:companyId/ai-connections/local-models", validate(localModelDiscoveryRequestSchema), async (req, res) => {
+    const companyId = req.params.companyId as string;
+    assertBoard(req);
+    assertCompanyAccess(req, companyId);
+    res.setHeader("Cache-Control", "no-store");
+    res.json(await discoverLocalModels(localModelDiscoveryRequestSchema.parse(req.body)));
   });
   router.post("/companies/:companyId/ai-connections/local/attempts", managementGuard("connections:configure", "POST /companies/:companyId/ai-connections/local/attempts", { personal: true }), validate(localAiLoginStartSchema), async (req, res) => {
     const companyId = req.params.companyId as string;

@@ -18,6 +18,8 @@ Paperclip ohne Container auf einem Linux-Rechner. Alles läuft über ein Skript:
   deshalb dieselben Firmen. Frischer Stand: `stop`, dann `reset`. Die alten
   Daten wandern nach `~/.paperclip/reset-backups/`; mit `reset --delete`
   werden sie endgültig gelöscht.
+- **LM Studio / llama.cpp:** Beim Verbinden listet Paperclip die Modelle des
+  Servers auf; anhaken statt Modell-IDs tippen.
 - **Anderer Rechner:** per SSH-Tunnel `ssh -L 3100:127.0.0.1:3100 du@host`.
 
 Ausführlich: [doc/local/ANLEITUNG-LOCAL-HARNESS.md](doc/local/ANLEITUNG-LOCAL-HARNESS.md) ·

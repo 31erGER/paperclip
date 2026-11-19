@@ -19,6 +19,7 @@ with `PAPERCLIP_DEPLOYMENT_PROFILE` = `standard | local | local_only`.
 | Queue setting UI | `ui/src/components/AgentRunQueueSetting.tsx` |
 | Hide price metrics | `ui/src/hooks/useDeploymentProfile.ts`, `ui/src/components/CostMetricsGate.tsx` (search `showCostMetrics`) |
 | Local first-agent onboarding (Pi/Hermes + LM Studio) | `ui/src/components/OnboardingWizard.tsx` (search `LOCAL_MODEL_ONBOARDING_TYPES`, `isLocalSource`), `ui/src/components/onboarding/OnboardingLocalSetup.tsx` |
+| Local model list (no typed model IDs) | `server/src/services/local-model-discovery.ts`, route `POST /companies/:companyId/ai-connections/local-models` in `server/src/routes/ai-connections.ts`, `ui/src/components/ai-connections/LocalModelPicker.tsx` |
 | Project folder | `ui/src/components/NewProjectDialog.tsx`, `server/src/lib/local-project-folder.ts`, `server/src/routes/projects.ts` (search `checkLocalProjectFolder`) |
 | Start / stop / reset without containers | `paperclip-local.sh` (repository root), `scripts/local/paperclip-local.service`, `README-LOCAL.md` |
 | Upstream updates | `scripts/local/update-from-upstream.sh` (check / merge); migration check base in `packages/db/scripts/migration-compatibility.ts` |
