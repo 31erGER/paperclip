@@ -77,10 +77,10 @@ case "$cmd" in
 
 Next steps:
   - Resolve each file (keep upstream behavior, re-apply the fork change; fork
-    code is marked "fork 31erGER" and listed in AGENTS.local.md), then
+    code is marked "fork 31erGER" and listed in AGENTS.fork.md), then
       git add <file> && git commit --no-edit
   - Or let a coding agent do it: "Resolve the merge conflicts listed by
-    `git diff --name-only --diff-filter=U` following AGENTS.local.md, then run
+    `git diff --name-only --diff-filter=U` following AGENTS.fork.md, then run
     pnpm local:check."
   - Or give up for now:  git merge --abort
 EOF

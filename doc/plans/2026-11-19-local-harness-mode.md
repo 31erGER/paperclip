@@ -41,17 +41,17 @@ read at start; exposed to the board through `/api/health`):
    it for free slots and, when a run settles, promotes the oldest queued run of
    any agent. Per-agent `maxConcurrentRuns` stays as an additional cap.
    Surfaced in Instance settings → General.
-5. **Start without containers** — `scripts/local/paperclip-local.sh`
+5. **Start without containers** — `./paperclip-local.sh`
    (`install | build | start | dev | status`), embedded PGlite, optional
    systemd user unit in `scripts/local/paperclip-local.service`.
-6. **Agent-friendly terminal workflow** — `AGENTS.local.md` (short entry point
+6. **Agent-friendly terminal workflow** — `AGENTS.fork.md` (short entry point
    for Pi), `doc/local/README.md` (module map of the fork-specific code),
    `pnpm local:check` running only the fork's focused tests and typechecks.
 
 ## Status — 2026-11-19
 
 Items 1–6 are implemented on branch `local-harness`. The operator guide is
-`doc/local/README.md`; the agent entry point is `AGENTS.local.md`. Not done
+`doc/local/README.md`; the agent entry point is `AGENTS.fork.md`. Not done
 yet: the agent configuration form still lists "Paperclip Runner" (disabled,
 Legacy is the default; the server rejects it in local profiles), and a live
 run with Pi against a local model server has not been performed.

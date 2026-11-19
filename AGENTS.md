@@ -4,7 +4,7 @@ Guidance for human and AI contributors working in this repository.
 
 > **Fork 31erGER — local harness.** For changes to the local deployment
 > profiles, the run queue, project folders, hidden price metrics or the
-> container-free start script, read [`AGENTS.local.md`](AGENTS.local.md) first.
+> container-free start script, read [`AGENTS.fork.md`](AGENTS.fork.md) first.
 > It lists the exact files and fast checks; you do not need the long reading
 > list below for those tasks.
 

@@ -18,12 +18,16 @@ git switch local-harness
 # Node 24 via nvm, if missing:
 curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
 . ~/.nvm/nvm.sh && nvm install 24
-scripts/local/paperclip-local.sh setup
-scripts/local/paperclip-local.sh start
+./paperclip-local.sh setup
+./paperclip-local.sh start
 ```
 
 Open http://127.0.0.1:3100. Settings live in `~/.config/paperclip-local/env`
-(see `scripts/local/env.example`). Data lives in `~/.paperclip`.
+(see `scripts/local/env.example`). Data lives in `~/.paperclip`, shared by
+every clone on the account. `./paperclip-local.sh stop` shuts Paperclip down
+(including its embedded database); `./paperclip-local.sh reset` returns to a
+fresh state (data moved to `~/.paperclip/reset-backups/`, `--delete` to
+remove it). Short German overview: `README-LOCAL.md`.
 
 Run as a service: see the header of `scripts/local/paperclip-local.service`.
 
@@ -89,9 +93,9 @@ git push origin local-harness
 ```
 
 Conflicts appear only where upstream changed the same lines as the fork. The
-fork keeps its changes in small modules (see `AGENTS.local.md`) so most
+fork keeps its changes in small modules (see `AGENTS.fork.md`) so most
 updates merge cleanly. When a merge stops, resolve the listed files by hand or
-ask a coding agent to do it with `AGENTS.local.md` as guide. A backup branch
+ask a coding agent to do it with `AGENTS.fork.md` as guide. A backup branch
 `backup/local-harness-<date>` is created before every merge.
 
 Upstream moves fast (thousands of commits per month). Merge often, for
@@ -100,7 +104,7 @@ example weekly: small merges have small conflicts.
 ## Changing Paperclip with Pi from a terminal
 
 Open a terminal in the checkout and start Pi there. Pi reads `AGENTS.md`,
-which points to `AGENTS.local.md`: a short map of the fork's modules, the
+which points to `AGENTS.fork.md`: a short map of the fork's modules, the
 rules, and the fast check commands (`pnpm local:check`). Keep
-`scripts/local/paperclip-local.sh dev` running in a second terminal to see
+`./paperclip-local.sh dev` running in a second terminal to see
 changes live on http://127.0.0.1:3100.

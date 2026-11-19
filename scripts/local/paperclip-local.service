@@ -13,9 +13,14 @@ Description=Paperclip local harness
 After=network-online.target
 
 [Service]
+# Graceful stop: SIGTERM to the start script's process group; the server
+# shuts its embedded database down. `./paperclip-local.sh stop` also stops
+# a database that outlived a crash.
+KillMode=mixed
+TimeoutStopSec=60
 Type=simple
 WorkingDirectory=%h/dev/paperclip-local
-ExecStart=/usr/bin/env bash %h/dev/paperclip-local/scripts/local/paperclip-local.sh start
+ExecStart=/usr/bin/env bash %h/dev/paperclip-local/paperclip-local.sh start
 Restart=on-failure
 RestartSec=5
 # Agents spawn CLIs (pi, claude, codex) found on this PATH. The start script

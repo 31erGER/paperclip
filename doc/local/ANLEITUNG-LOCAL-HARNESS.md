@@ -21,9 +21,9 @@ normale Prozesse direkt in diesem Ordner.
 | **Projektordner** | Der Dialog „Add Project“ hat ein Feld **Project folder**. In den lokalen Profilen ist es Pflicht, und der Server prüft, ob der Ordner existiert. |
 | **Agent-Run-Queue** | Einstellungen → General → **Agent run queue**: Höchstzahl gleichzeitiger Agent-Runs über alle Firmen. Weitere Runs warten und starten in Ankunftsreihenfolge. |
 | **Keine Preis-Metriken** | Im Profil `local_only` fehlen Costs-Seiten, Ausgaben-Kacheln, Budget-Tabs und Dollarbeträge. Token und Laufzeiten bleiben sichtbar. |
-| **Start-Skript** | `scripts/local/paperclip-local.sh` mit `setup`, `start`, `dev`, `status`, `stop` und `check`, dazu eine systemd-Unit. |
+| **Start-Skript** | `./paperclip-local.sh` mit `setup`, `start`, `dev`, `status`, `stop` und `check`, dazu eine systemd-Unit. |
 | **Update-Skript** | `scripts/local/update-from-upstream.sh` holt Änderungen vom Original, siehe [ANLEITUNG-UPSTREAM-MERGE.md](ANLEITUNG-UPSTREAM-MERGE.md). |
-| **Agent-Leitfaden** | `AGENTS.local.md`: kurze Karte der Fork-Module für Coding-Agents wie Pi. |
+| **Agent-Leitfaden** | `AGENTS.fork.md`: kurze Karte der Fork-Module für Coding-Agents wie Pi. |
 | **Lokales Onboarding** | In den lokalen Profilen bietet das Onboarding für den ersten Agent zusätzlich Pi und Hermes mit LM Studio oder llama.cpp an. |
 | **Aus OneDrive übernommen** | Datenschutz-Härtung (Telemetrie und externe Diagnose aus) und die lokale Verbindungsart für Pi und Hermes. |
 
@@ -38,9 +38,10 @@ server/src/services/heartbeat/run-slot-admission.ts  Einhang: ruft die instanzwe
 ui/src/hooks/useDeploymentProfile.ts                 Profil in der Oberfläche
 ui/src/components/AgentRunQueueSetting.tsx           Queue-Einstellung
 ui/src/components/CostMetricsGate.tsx                sperrt Kostenseiten
-scripts/local/                                       Start-, Update-Skript, systemd
+paperclip-local.sh                                   Start-/Stop-/Reset-Skript (Hauptordner)
+scripts/local/                                       Update-Skript, systemd-Unit, Einstellungsvorlage
 doc/local/                                           diese Anleitungen
-AGENTS.local.md                                      Leitfaden für Coding-Agents
+AGENTS.fork.md                                      Leitfaden für Coding-Agents
 ```
 
 In großen Original-Dateien gibt es nur kurze Einhänge. Sie sind mit dem
@@ -73,8 +74,8 @@ mkdir -p ~/dev && cd ~/dev
 git clone https://github.com/31erGER/paperclip.git paperclip-local
 cd paperclip-local
 git switch local-harness
-scripts/local/paperclip-local.sh setup
-scripts/local/paperclip-local.sh start
+./paperclip-local.sh setup
+./paperclip-local.sh start
 ```
 
 `setup` installiert die Abhängigkeiten und legt die Einstellungsdatei
@@ -84,7 +85,7 @@ Beim ersten Start legt Paperclip seine Datenbank in `~/.paperclip` an. Das
 dauert etwa eine Minute. Ob der Server bereit ist:
 
 ```sh
-scripts/local/paperclip-local.sh status
+./paperclip-local.sh status
 # status=ok profile=local_only version=…
 ```
 
@@ -203,11 +204,11 @@ Codex.
 
 ```sh
 cd ~/dev/paperclip-local
-scripts/local/paperclip-local.sh dev    # Terminal 1: Server mit Live-Neuladen
+./paperclip-local.sh dev    # Terminal 1: Server mit Live-Neuladen
 pi                                      # Terminal 2: Pi im Repository
 ```
 
-Pi liest `AGENTS.md`. Ganz oben verweist sie auf `AGENTS.local.md` mit den
+Pi liest `AGENTS.md`. Ganz oben verweist sie auf `AGENTS.fork.md` mit den
 zuständigen Dateien, Regeln und schnellen Prüfungen. Nach einer Änderung:
 
 ```sh
@@ -226,26 +227,58 @@ nicht nutzt.
 
 | Befehl | Zweck |
 | --- | --- |
-| `scripts/local/paperclip-local.sh setup` | Node/pnpm prüfen, Abhängigkeiten installieren |
-| `scripts/local/paperclip-local.sh start` | Server starten (Vordergrund) |
-| `scripts/local/paperclip-local.sh dev` | Server mit Live-Neuladen für Entwicklung |
-| `scripts/local/paperclip-local.sh status` | Zustand und aktives Profil |
-| `scripts/local/paperclip-local.sh stop` | Server stoppen |
-| `scripts/local/paperclip-local.sh check` | Fork-Tests (wie `pnpm local:check`) |
+| `./paperclip-local.sh setup` | Node/pnpm prüfen, Abhängigkeiten installieren |
+| `./paperclip-local.sh start` | Server starten (Vordergrund) |
+| `./paperclip-local.sh dev` | Server mit Live-Neuladen für Entwicklung |
+| `./paperclip-local.sh status` | Zustand und aktives Profil |
+| `./paperclip-local.sh stop` | Server herunterfahren, inkl. eingebetteter Datenbank |
+| `./paperclip-local.sh reset` | Werkszustand (siehe Abschnitt 6a) |
+| `./paperclip-local.sh update` | wie `scripts/local/update-from-upstream.sh` (`check` oder `merge`) |
+| `./paperclip-local.sh check` | Fork-Tests (wie `pnpm local:check`) |
 | `scripts/local/update-from-upstream.sh check` | Neues vom Original anzeigen |
 | `scripts/local/update-from-upstream.sh merge` | Original einmergen |
 
 ---
 
+## 6a. Daten und Werkszustand (Factory Reset)
+
+Paperclip speichert alles, was zur Laufzeit entsteht, **nicht im Repo**,
+sondern in `~/.paperclip/instances/default`: die Datenbank mit Firmen,
+Agents, Aufgaben, Verbindungen und Secrets, dazu Logs, Backups und die
+Home-Ordner der Agents. Jeder Klon auf demselben Benutzerkonto benutzt diese
+Daten. Ein neuer Klon startet deshalb **nicht** leer.
+
+Frischer Stand:
+
+```sh
+./paperclip-local.sh stop
+./paperclip-local.sh reset          # fragt nach; Daten wandern nach ~/.paperclip/reset-backups/
+./paperclip-local.sh start
+```
+
+- `reset --yes` fragt nicht nach, `reset --delete` löscht endgültig statt zu
+  sichern.
+- Erhalten bleiben: das Repo, `~/.config/paperclip-local/env` und **deine
+  Projektordner** (die liegen außerhalb von `~/.paperclip`).
+- Rückgängig machen (Paperclip gestoppt): den von `reset` angezeigten
+  `mv`-Befehl ausführen.
+- Läuft nach einem Absturz noch die eingebettete Datenbank, fahren `stop`
+  und `reset` sie sauber herunter.
+
+Tipp für Experimente: Mit `PAPERCLIP_INSTANCE_ID=test` in der
+Einstellungsdatei nutzt Paperclip eine zweite, getrennte Instanz unter
+`~/.paperclip/instances/test`.
+
 ## 7. Fehlerbehebung
 
 | Problem | Lösung |
 | --- | --- |
+| Alte Testfirmen nach neuem Klon | Daten liegen in `~/.paperclip`, nicht im Repo: `./paperclip-local.sh stop`, dann `reset` (Abschnitt 6a). |
 | `cargo: not found` beim Start | Das Profil ist `standard`. In `~/.config/paperclip-local/env` `PAPERCLIP_DEPLOYMENT_PROFILE=local_only` setzen. |
 | „Project folder does not exist on this host“ | Ordner anlegen (`mkdir -p …`) und den absoluten Pfad verwenden. |
 | Agent liefert Unsinn | Queue auf „1 at a time“ stellen; Modell mit Tool-Calling und genug Kontext verwenden. |
 | `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH` | `pnpm install --no-frozen-lockfile` (das Setup-Skript macht das automatisch). |
-| Oberfläche nicht erreichbar | `scripts/local/paperclip-local.sh status`. Von einem anderen Rechner per SSH-Tunnel zugreifen (Abschnitt 4). |
+| Oberfläche nicht erreichbar | `./paperclip-local.sh status`. Von einem anderen Rechner per SSH-Tunnel zugreifen (Abschnitt 4). |
 | „Board access required“ im Browser | Der Browser läuft nicht auf dem Paperclip-Rechner (oder unter WSL im Windows-Browser). SSH-Tunnel oder Modus mit Anmeldung verwenden (Abschnitt 4). |
 | Pi-Agent: „model not found“ | Modell-ID in der Verbindung muss exakt der ID im Modellserver entsprechen. |
 

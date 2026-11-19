@@ -92,8 +92,8 @@ an und listet die Dateien auf: weiter mit Abschnitt 3.
 pnpm local:check
 (cd server && npx tsc --noEmit -p .)
 (cd ui && npx tsc --noEmit -p .)    # Fehler unter storybook/ sind bekannt und harmlos
-scripts/local/paperclip-local.sh start
-scripts/local/paperclip-local.sh status    # status=ok profile=local_only
+./paperclip-local.sh start
+./paperclip-local.sh status    # status=ok profile=local_only
 ```
 
 Kurz in der Oberfläche prüfen:
@@ -134,7 +134,7 @@ git diff --name-only --diff-filter=U
 
 **Das Original gewinnt, die Fork-Änderung wird wieder eingebaut.** Fork-Code
 erkennst du am Kommentar `fork 31erGER`. Die zugehörigen Dateien stehen in
-`AGENTS.local.md`. Fast immer heißt das: neuen Original-Code übernehmen und
+`AGENTS.fork.md`. Fast immer heißt das: neuen Original-Code übernehmen und
 den kurzen Fork-Einhang (ein Import, eine `if`-Abfrage, ein Hook-Aufruf)
 wieder einsetzen.
 
@@ -172,7 +172,7 @@ Danach weiter mit Abschnitt 2, Schritt 4 (Prüfen) und Schritt 5 (Pushen).
 Pi oder ein anderer Coding-Agent kann das übernehmen. Auftrag:
 
 > Löse die Merge-Konflikte aus `git diff --name-only --diff-filter=U` nach
-> `AGENTS.local.md`: Original-Code übernehmen, Fork-Blöcke mit
+> `AGENTS.fork.md`: Original-Code übernehmen, Fork-Blöcke mit
 > `fork 31erGER` wieder einsetzen, `pnpm-lock.yaml` mit `--theirs` und
 > `pnpm install` lösen. Danach `pnpm local:check` ausführen und die
 > geänderten Fork-Stellen zusammenfassen. Nicht committen.
