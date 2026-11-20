@@ -60,6 +60,14 @@ explicit native assets and saved execution. Saved runner/model/provider override
 and approval activation. This selection does not grant connection access or
 bypass hiring authorization. Source: [runner resolver](../../server/src/services/agent-runner-selection.ts).
 
+Fork 31erGER: when an agent hires and the request names no AI connection, the
+new agent inherits the hiring agent's connection only if that connection is
+`local` (loopback LM Studio / llama.cpp) and compatible with the new harness,
+together with the model (when unset) and the default execution environment
+(when unset). The binding passes the normal hire validation and install.
+Cloud, gateway and pooled connections are never inherited. Source:
+[local connection inheritance](../../server/src/services/local-connection-inheritance.ts).
+
 Policy: Agent creation/configuration uses action grants, resource policies and change
 consent; some controls require a board actor.
 

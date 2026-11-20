@@ -21,6 +21,7 @@ with `PAPERCLIP_DEPLOYMENT_PROFILE` = `standard | local | local_only`.
 | Local first-agent onboarding (Pi/Hermes + LM Studio) | `ui/src/components/OnboardingWizard.tsx` (search `LOCAL_MODEL_ONBOARDING_TYPES`, `isLocalSource`), `ui/src/components/onboarding/OnboardingLocalSetup.tsx` |
 | Local model list (no typed model IDs) | `server/src/services/local-model-discovery.ts`, route `POST /companies/:companyId/ai-connections/local-models` in `server/src/routes/ai-connections.ts`, `ui/src/components/ai-connections/LocalModelPicker.tsx` |
 | Agent API tokens (instance secrets without `paperclipai onboard`) | `scripts/local/ensure-instance-secrets.ts`, called by `paperclip-local.sh` (`ensure_instance_secrets`) |
+| Hired agents inherit the local model connection | `server/src/services/local-connection-inheritance.ts`, hook `inheritHiringAgentLocalConnection` in `server/src/routes/agents.ts` |
 | Project folder | `ui/src/components/NewProjectDialog.tsx`, `server/src/lib/local-project-folder.ts`, `server/src/routes/projects.ts` (search `checkLocalProjectFolder`) |
 | Start / stop / reset without containers | `paperclip-local.sh` (repository root), `scripts/local/paperclip-local.service`, `README-LOCAL.md` |
 | Upstream updates | `scripts/local/update-from-upstream.sh` (check / merge); migration check base in `packages/db/scripts/migration-compatibility.ts` |

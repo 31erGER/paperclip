@@ -203,6 +203,34 @@ der älteste wartende Run, egal von welchem Agent.
 Im Profil `standard` zeigt das Onboarding wie im Original nur Claude und
 Codex.
 
+### Agents stellen Agents ein
+
+Hat ein Agent die Berechtigung „Can create agents“, kann er selbst weitere
+Agents einstellen. Nutzt er eine **lokale** Verbindung (LM Studio,
+llama.cpp), erbt der neue Agent automatisch:
+
+- dieselbe Modellverbindung (sie wird für ihn freigeschaltet),
+- das Modell des einstellenden Agents, falls der Hire keines nennt,
+- die lokale Ausführungsumgebung.
+
+Der neue Agent kann also ohne Handarbeit loslegen. Nennt der Hire selbst eine
+Verbindung oder ein Modell, gilt diese Angabe. Cloud- und Gateway-Verbindungen
+werden nie automatisch vererbt. Den Arbeitsordner bestimmt weiterhin das
+Projekt der Aufgabe, nicht der Agent.
+
+### Pi-Konfiguration und Extensions unter Paperclip
+
+Paperclip startet dasselbe `pi`-Programm wie du im Terminal (Befehl `pi` aus
+dem `PATH`), aber mit **eigener Konfiguration**: Bei einer in Paperclip
+verwalteten Verbindung setzt es `PI_CODING_AGENT_DIR` (und `HOME`) auf einen
+eigenen Ordner, in dem nur die Modell-Liste (`models.json`) liegt. Deine
+persönlichen Einstellungen und globalen Extensions unter `~/.pi/agent/`
+werden dort nicht geladen. Zusätzlich lädt Paperclip seine eigenen Skills
+und eine eigene kleine Extension.
+
+Extensions, die im Projektordner unter `.pi/extensions/` liegen, sollte Pi
+weiterhin laden, weil es dort im Arbeitsordner sucht. Das ist nicht getestet.
+
 ### Paperclip selbst mit Pi im Terminal ändern
 
 ```sh
@@ -281,6 +309,7 @@ Einstellungsdatei nutzt Paperclip eine zweite, getrennte Instanz unter
 | --- | --- |
 | Agent meldet „keine Berechtigung“ / „Unauthorized“ beim Einstellen (Hire) oder bei anderen API-Aufrufen, obwohl der Schalter an ist | Dem Agent fehlt das Bearer-Token (`PAPERCLIP_API_KEY`). Der Server kann es nur ausstellen, wenn die Instanz `PAPERCLIP_AGENT_JWT_SECRET` hat. `./paperclip-local.sh start` legt es automatisch in `~/.paperclip/instances/default/.env` an. Also: aktualisieren (`git pull`), `stop`, `start`. Im Startbanner muss „Agent JWT  set“ stehen (vorher: „missing“). |
 | Agent darf trotz Token nicht einstellen: „Missing permission: agents:create“ | Auf der Berechtigungsseite des Agents „Can create agents“ einschalten. |
+| Neu eingestellter Agent steht auf „paused“ mit „The execution command was not found“ | Paperclip prüft jeden neuen Agent. Der Befehl des Adapters fehlt auf dem Rechner, z. B. `pi`. Installieren (`npm install -g @earendil-works/pi-coding-agent@0.74.0`), dann beim Agent „Retry now“. |
 | Hire abgelehnt: „Agent keys cannot configure host-executed process adapters“ | Agents dürfen keine `process`-Agents (beliebige Befehle) anlegen. Der eingestellte Agent muss einen normalen Adapter nutzen, z. B. Pi. |
 | Alte Testfirmen nach neuem Klon | Daten liegen in `~/.paperclip`, nicht im Repo: `./paperclip-local.sh stop`, dann `reset` (Abschnitt 6a). |
 | `cargo: not found` beim Start | Das Profil ist `standard`. In `~/.config/paperclip-local/env` `PAPERCLIP_DEPLOYMENT_PROFILE=local_only` setzen. |

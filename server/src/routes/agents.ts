@@ -119,6 +119,7 @@ import {
 } from "@paperclipai/adapter-utils/server-utils";
 import { trackAgentCreated } from "@paperclipai/shared/telemetry";
 import { validate } from "../middleware/validate.js";
+import { resolveLocalConnectionInheritance } from "../services/local-connection-inheritance.js";
 import { registerAgentProjectAccessRoutes } from "./agent-project-access.js";
 import { inheritNativeRunnerAdapterConfig } from "../services/native-runtime/native-agent-runtime-inheritance.js";
 import { agentInstructionRevisionService } from "../services/agent-instruction-revisions.js";
@@ -2393,6 +2394,42 @@ export function agentRoutes(
     };
   }
 
+  // Fork 31erGER: an agent hired by an agent inherits the hiring agent's
+  // local model connection (LM Studio, llama.cpp), its model and its execution
+  // environment, so the new agent can run without manual setup. See
+  // services/local-connection-inheritance.ts for the rules. The result goes
+  // through the normal hire validation, which checks and installs the binding.
+  async function inheritHiringAgentLocalConnection(
+    req: Request,
+    companyId: string,
+    adapterType: string | null | undefined,
+    adapterConfig: Record<string, unknown>,
+    runtimeConfig: unknown,
+    defaultEnvironmentId: string | null | undefined,
+  ) {
+    if (req.actor.type !== "agent" || !req.actor.agentId) return null;
+    const parent = await svc.getById(req.actor.agentId);
+    if (!parent || parent.companyId !== companyId) return null;
+    return resolveLocalConnectionInheritance({
+      parent,
+      child: { adapterType, adapterConfig, runtimeConfig, defaultEnvironmentId },
+      readParentRouting: async (binding) => {
+        if (binding.mode === "router") return undefined;
+        try {
+          const parentConfig = asRecord(parent.adapterConfig) ?? {};
+          const selection = await aiConnectionService(db).select({
+            companyId, agentId: parent.id, userId: responsibleUserForAiRequest(req), adapterType: parent.adapterType,
+            model: parentConfig.model, runnerProvider: parentConfig.provider, acpxAgent: parentConfig.acpxAgent, binding,
+          });
+          return aiConnectionMetadataSchema.parse(selection.connection.config.ai).routing;
+        } catch {
+          // The parent's own connection is unusable; the hire continues without one.
+          return undefined;
+        }
+      },
+    });
+  }
+
   function applyCreateDefaultsByAdapterType(
     adapterType: string | null | undefined,
     adapterConfig: Record<string, unknown>,
@@ -4612,13 +4649,22 @@ export function agentRoutes(
     assertNoAgentAdapterConfigMutation(req, rawHireAdapterConfig);
     assertNoAgentLocalAdapterHostCommandMutation(req, hireInput.adapterType, rawHireAdapterConfig, await callerUsesAiConnectionPool(req, companyId));
     assertNoAgentProcessAdapterMutation(req, hireInput.adapterType, Object.keys(rawHireAdapterConfig).length > 0);
+    // Fork 31erGER: local model connection, model and environment of the hiring agent.
+    const localConnectionInheritance = await inheritHiringAgentLocalConnection(
+      req, companyId, hireInput.adapterType, rawHireAdapterConfig, hireInput.runtimeConfig, hireInput.defaultEnvironmentId);
+    if (localConnectionInheritance) {
+      hireInput.runtimeConfig = localConnectionInheritance.runtimeConfig;
+      if (localConnectionInheritance.defaultEnvironmentId !== undefined) {
+        hireInput.defaultEnvironmentId = localConnectionInheritance.defaultEnvironmentId;
+      }
+    }
     const authInheritance = await applyHiringAgentAuthInheritance(
       req,
       companyId,
       hireInput.adapterType,
       applyCreateDefaultsByAdapterType(
         hireInput.adapterType,
-        rawHireAdapterConfig,
+        localConnectionInheritance?.adapterConfig ?? rawHireAdapterConfig,
       ),
       hireInput.runtimeConfig,
     );
@@ -4834,6 +4880,7 @@ export function agentRoutes(
           issueIds: sourceIssueIds,
           desiredSkills: desiredSkillAssignment.desiredSkills,
           hireFingerprint: requestFingerprint,
+          ...(localConnectionInheritance && req.actor.type === "agent" ? { inheritedLocalAiConnectionFromAgentId: req.actor.agentId } : {}),
           ...(managedHireConnection?.memberConnectionIds ? { aiConnectionPoolId: managedHireConnection.connectionId, aiConnectionMemberInstallIds: managedHireConnection.memberConnectionIds } : {}),
         },
       });
