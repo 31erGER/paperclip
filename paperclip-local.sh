@@ -82,6 +82,14 @@ health_url() {
 
 server_up() { curl -fsS "$(health_url)" >/dev/null 2>&1; }
 
+# Agents authenticate to the Paperclip API with a per-run bearer token
+# (PAPERCLIP_API_KEY). The server can only mint it when the instance has
+# PAPERCLIP_AGENT_JWT_SECRET, which upstream creates in `paperclipai onboard`.
+# Without it every agent API call (hiring, creating tasks) is "Unauthorized".
+ensure_instance_secrets() {
+  node cli/node_modules/tsx/dist/cli.mjs scripts/local/ensure-instance-secrets.ts
+}
+
 instance_root() {
   local home="${PAPERCLIP_HOME:-$HOME/.paperclip}"
   home="${home/#\~/$HOME}"
@@ -159,6 +167,7 @@ case "$cmd" in
       cp "$REPO_ROOT/scripts/local/env.example" "$HOME/.config/paperclip-local/env"
       log "wrote default settings to ~/.config/paperclip-local/env"
     fi
+    ensure_instance_secrets
     log "setup done. Start with: ./paperclip-local.sh start"
     ;;
   start)
@@ -166,6 +175,7 @@ case "$cmd" in
     if server_up; then log "already running on $(health_url)"; exit 0; fi
     # A database left over from a crash would block the new start.
     stop_leftover_db
+    ensure_instance_secrets
     log "profile=$PAPERCLIP_DEPLOYMENT_PROFILE http://$HOST:$PORT"
     exec pnpm dev:once
     ;;
@@ -179,6 +189,7 @@ case "$cmd" in
   dev)
     load_node
     stop_leftover_db
+    ensure_instance_secrets
     log "profile=$PAPERCLIP_DEPLOYMENT_PROFILE http://$HOST:$PORT (watch mode)"
     exec pnpm dev
     ;;

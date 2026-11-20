@@ -267,6 +267,9 @@ Frischer Stand:
   `mv`-Befehl ausführen.
 - Läuft nach einem Absturz noch die eingebettete Datenbank, fahren `stop`
   und `reset` sie sauber herunter.
+- In `~/.paperclip/instances/default/.env` liegen die Instanz-Geheimnisse
+  (u. a. `PAPERCLIP_AGENT_JWT_SECRET` für die Agent-Tokens). `start` legt
+  sie an, falls sie fehlen; nach einem `reset` entstehen neue.
 
 Tipp für Experimente: Mit `PAPERCLIP_INSTANCE_ID=test` in der
 Einstellungsdatei nutzt Paperclip eine zweite, getrennte Instanz unter
@@ -276,6 +279,9 @@ Einstellungsdatei nutzt Paperclip eine zweite, getrennte Instanz unter
 
 | Problem | Lösung |
 | --- | --- |
+| Agent meldet „keine Berechtigung“ / „Unauthorized“ beim Einstellen (Hire) oder bei anderen API-Aufrufen, obwohl der Schalter an ist | Dem Agent fehlt das Bearer-Token (`PAPERCLIP_API_KEY`). Der Server kann es nur ausstellen, wenn die Instanz `PAPERCLIP_AGENT_JWT_SECRET` hat. `./paperclip-local.sh start` legt es automatisch in `~/.paperclip/instances/default/.env` an. Also: aktualisieren (`git pull`), `stop`, `start`. Im Startbanner muss „Agent JWT  set“ stehen (vorher: „missing“). |
+| Agent darf trotz Token nicht einstellen: „Missing permission: agents:create“ | Auf der Berechtigungsseite des Agents „Can create agents“ einschalten. |
+| Hire abgelehnt: „Agent keys cannot configure host-executed process adapters“ | Agents dürfen keine `process`-Agents (beliebige Befehle) anlegen. Der eingestellte Agent muss einen normalen Adapter nutzen, z. B. Pi. |
 | Alte Testfirmen nach neuem Klon | Daten liegen in `~/.paperclip`, nicht im Repo: `./paperclip-local.sh stop`, dann `reset` (Abschnitt 6a). |
 | `cargo: not found` beim Start | Das Profil ist `standard`. In `~/.config/paperclip-local/env` `PAPERCLIP_DEPLOYMENT_PROFILE=local_only` setzen. |
 | „Project folder does not exist on this host“ | Ordner anlegen (`mkdir -p …`) und den absoluten Pfad verwenden. |

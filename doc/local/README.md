@@ -29,6 +29,11 @@ every clone on the account. `./paperclip-local.sh stop` shuts Paperclip down
 fresh state (data moved to `~/.paperclip/reset-backups/`, `--delete` to
 remove it). Short German overview: `README-LOCAL.md`.
 
+`start` also creates the instance secrets that `paperclipai onboard` would
+create (`PAPERCLIP_AGENT_JWT_SECRET` in `~/.paperclip/instances/<id>/.env`).
+Without them local agents get no `PAPERCLIP_API_KEY` and every agent API call,
+such as hiring another agent, fails with "Unauthorized".
+
 Run as a service: see the header of `scripts/local/paperclip-local.service`.
 
 ## Deployment profiles
