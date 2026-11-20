@@ -2,6 +2,7 @@ import { isOpenRouterUrl, openRouterAttributionHeaders } from "@paperclipai/adap
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { hostPiConfigLinkEnabled, linkHostPiAgentConfig, resolveHostPiAgentDir } from "./host-agent-config.js";
 
 type PreparedPiRuntimeConfig = {
   env: Record<string, string>;
@@ -107,6 +108,14 @@ function parseProviderConfig(
 // and repoints PI_CODING_AGENT_DIR at the in-sandbox copy.
 export async function preparePiRuntimeConfig(input: {
   env: Record<string, string>;
+  /**
+   * Fork 31erGER: link the operator's own Pi extensions, packages and settings
+   * into the managed directory. Only for runs on this host; defaults to the
+   * deployment-profile setting (see host-agent-config.ts).
+   */
+  linkHostConfig?: boolean;
+  /** The operator's Pi directory; defaults to PI_CODING_AGENT_DIR or ~/.pi/agent. */
+  hostAgentDir?: string;
 }): Promise<PreparedPiRuntimeConfig> {
   const resolveEnv = (name: string): string | undefined => input.env[name] ?? process.env[name];
   const { providers, warning } = parseProviderConfig(
@@ -149,6 +158,19 @@ export async function preparePiRuntimeConfig(input: {
     throw err;
   }
 
+  // Fork 31erGER: keep the operator's extensions and settings available. A
+  // failure here must not block the run; the managed models.json is enough.
+  let hostConfigNote: string | null = null;
+  if (input.linkHostConfig ?? hostPiConfigLinkEnabled()) {
+    const hostAgentDir = input.hostAgentDir ?? resolveHostPiAgentDir();
+    try {
+      const linked = await linkHostPiAgentConfig(agentConfigDir, hostAgentDir);
+      if (linked.length > 0) hostConfigNote = `Linked the host Pi configuration from ${hostAgentDir} into the managed agent dir: ${linked.join(", ")}.`;
+    } catch (err) {
+      hostConfigNote = `Could not link the host Pi configuration from ${hostAgentDir}: ${err instanceof Error ? err.message : String(err)}`;
+    }
+  }
+
   return {
     env: {
       ...input.env,
@@ -157,6 +179,7 @@ export async function preparePiRuntimeConfig(input: {
     notes: [
       ...(warning ? [warning] : []),
       `Injected ${Object.keys(providers).length} custom Pi provider(s) from PAPERCLIP_PI_PROVIDERS into a managed models.json: ${Object.keys(providers).join(", ")}.`,
+      ...(hostConfigNote ? [hostConfigNote] : []),
     ],
     agentConfigDir,
     cleanup: async () => {

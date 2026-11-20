@@ -221,15 +221,41 @@ Projekt der Aufgabe, nicht der Agent.
 ### Pi-Konfiguration und Extensions unter Paperclip
 
 Paperclip startet dasselbe `pi`-Programm wie du im Terminal (Befehl `pi` aus
-dem `PATH`), aber mit **eigener Konfiguration**: Bei einer in Paperclip
-verwalteten Verbindung setzt es `PI_CODING_AGENT_DIR` (und `HOME`) auf einen
-eigenen Ordner, in dem nur die Modell-Liste (`models.json`) liegt. Deine
-persönlichen Einstellungen und globalen Extensions unter `~/.pi/agent/`
-werden dort nicht geladen. Zusätzlich lädt Paperclip seine eigenen Skills
-und eine eigene kleine Extension.
+dem `PATH`). Pi kennt einen eigenen Modellserver nur über die Datei
+`models.json` in seinem Konfigurationsordner. Bei einer in Paperclip
+verwalteten Verbindung legt Paperclip deshalb pro Lauf einen eigenen Ordner
+mit seiner `models.json` an und setzt `PI_CODING_AGENT_DIR` darauf.
 
-Extensions, die im Projektordner unter `.pi/extensions/` liegen, sollte Pi
-weiterhin laden, weil es dort im Arbeitsordner sucht. Das ist nicht getestet.
+In den Profilen `local` und `local_only` verlinkt Paperclip in diesen Ordner
+zusätzlich **deine globale Pi-Einrichtung** aus `~/.pi/agent/`: Extensions,
+installierte Pakete, `settings.json`, Themes, Prompt-Vorlagen und die von Pi
+heruntergeladenen Hilfsprogramme. Deine Extensions laufen damit auch in
+Paperclip-Läufen.
+
+Bewusst **nicht** übernommen werden:
+
+| Datei/Ordner | Grund |
+| --- | --- |
+| `models.json` | Die in Paperclip gewählte Verbindung muss gelten. |
+| `auth.json` | Deine persönlichen Anbieter-Logins bleiben aus Agent-Läufen heraus. |
+| `sessions/` | Paperclip führt eigene Sitzungsdateien. |
+| `skills/` | Paperclip übergibt sein Skill-Verzeichnis selbst. |
+| `AGENTS.md`, `SYSTEM.md`, `APPEND_SYSTEM.md` | Persönliche globale Anweisungen sollen Agents nicht verändern. |
+
+Es sind Verknüpfungen, keine Kopien: Nach dem Lauf verschwinden nur die
+Links, deine Dateien bleiben. Abschalten mit `PAPERCLIP_PI_HOST_CONFIG=0` in
+der Einstellungsdatei; mit `=1` gilt es auch im Profil `standard`.
+
+Einschränkungen:
+
+- `HOME` zeigt in Agent-Läufen weiterhin auf einen eigenen Ordner. Eine
+  Extension, die Dateien unter deinem echten `~` erwartet, findet sie dort
+  nicht.
+- Extensions, die eine Desktop-Sitzung brauchen (z. B. Benachrichtigungen),
+  funktionieren nur, wenn Paperclip in deiner Desktop-Sitzung läuft, nicht
+  als Hintergrunddienst ohne Bildschirm.
+- Mit einer echten Pi-Installation und einer echten Extension ist das noch
+  nicht getestet, nur mit einem Testprogramm, das die Dateien auflistet.
 
 ### Paperclip selbst mit Pi im Terminal ändern
 

@@ -339,7 +339,12 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   // Materialize custom Pi providers (PAPERCLIP_PI_PROVIDERS) into a managed
   // PI_CODING_AGENT_DIR before runtimeEnv is computed, so both local validation
   // and the spawned Pi process resolve models against the managed models.json.
-  const preparedRuntimeConfig = await preparePiRuntimeConfig({ env });
+  const preparedRuntimeConfig = await preparePiRuntimeConfig({
+    env,
+    // Fork 31erGER: host extensions and settings only make sense for a run on
+    // this host; a remote target gets a copy of the managed directory.
+    ...(executionTargetIsRemote ? { linkHostConfig: false } : {}),
+  });
   const localAgentConfigDir = preparedRuntimeConfig.agentConfigDir ?? "";
   if (localAgentConfigDir) {
     env.PI_CODING_AGENT_DIR = localAgentConfigDir;

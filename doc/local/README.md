@@ -78,6 +78,14 @@ applies as well.
    Later agents: Agents → Add agent → Pi with the **Local** model source.
    See `doc/connections/AI-CONNECTIONS.md` for the connection details.
 
+## Pi extensions
+
+Under the local profiles the managed Pi directory of each run links the
+operator's own Pi setup from `~/.pi/agent` (extensions, packages,
+`settings.json`, themes, prompts, tools). Never linked: `models.json`,
+`auth.json`, `sessions`, `skills` and the global instruction files.
+`PAPERCLIP_PI_HOST_CONFIG=0` turns it off.
+
 ## Remote access
 
 Without sign-in (`local_trusted`), only processes on the Paperclip host get
