@@ -1,7 +1,7 @@
 import { usePrimaryAgentPresentation } from "@/components/primary-agent/PrimaryAgentPresentation";
 import { useEffect, useState } from "react";
 import { MessageCircle } from "lucide-react";
-import { AgentAvatar } from "@/components/AgentAvatar";
+import { AgentAvatarWithStatus, AgentStatusText, resolveEffectiveAgentStatus } from "@/components/AgentStatusIndicator"; // fork 31erGER
 import { QueryErrorState, useQueryView } from "@/components/QueryView";
 import { Button } from "@/components/ui/button";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
@@ -77,8 +77,8 @@ function AgentChatsContent({ companyId, userId, enabled, loaded, agents, chats, 
             setOpeningId(agent.id); setOpenError(null);
             try { await openChat(agent); } catch (error) { setOpenError(error instanceof Error ? error.message : "Couldn’t open chat. Try again."); } finally { setOpeningId(null); }
           }} className="flex items-center gap-3 rounded-lg border border-border p-4 text-left hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50">
-          <AgentAvatar agent={agent} size={32} />
-          <span className="flex min-w-0 flex-col gap-1"><span className="truncate text-sm font-medium">{agent.name}</span><span className="text-xs text-muted-foreground">{openingId === agent.id ? "Opening chat…" : agent.title ?? agent.role}</span></span>
+          <AgentAvatarWithStatus agent={agent} size={32} status={resolveEffectiveAgentStatus(agent.status)} />
+          <span className="flex min-w-0 flex-col gap-1"><span className="truncate text-sm font-medium">{agent.name}</span><span className="truncate text-xs text-muted-foreground">{openingId === agent.id ? "Opening chat…" : <><AgentStatusText status={resolveEffectiveAgentStatus(agent.status)} />{` · ${agent.title ?? agent.role}`}</>}</span></span>
         </button>)}
       </div>}
     {openError && <p role="alert" className="text-sm text-destructive">{openError}</p>}

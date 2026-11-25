@@ -73,7 +73,8 @@ export function createSteerQueuedComment<Identity>(steering: QueuedCommentSteeri
 
         const queue = await tx.readPendingQueue();
         requireQueuedCommentMutationTarget(queue, input.queueId, input.revision);
-        if (queue.protocol !== "paperclip_runner_v1") {
+        // fork 31erGER: allow steering when a local Pi RPC run advertises available steering.
+        if (queue.protocol !== "paperclip_runner_v1" && queue.steeringDisposition !== "available") {
           throw new QueuedCommentMutationError("steering_unsupported", "This runner does not support same-turn steering");
         }
         const entry = queue.entries.find((candidate) => candidate.comment.id === input.commentId);

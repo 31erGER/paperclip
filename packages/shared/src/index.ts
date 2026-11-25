@@ -3111,6 +3111,7 @@ export {
   parseDeploymentProfile,
   type DeploymentProfile,
 } from "./deployment-profile.js";
+export * from "./vault.js"; // fork 31erGER
 export { normalizeClaudeRunnerOptions, type AgentConfigurationWarning } from "./runner-configuration-warnings.js";
 export { EXTERNAL_AGENT_TOOL_GUIDANCE, DOT_AGENT_TOOL_GUIDANCE, GROK_BOT_AGENT_TOOL_GUIDANCE } from "./external-agent-guidance.js";
 

@@ -707,6 +707,9 @@ export async function deliverConversationComments(
               wakeCommentId: comment.id,
               wakeCommentIds: [comment.id],
               source: "issue.comment",
+              // fork 31erGER: mark direct board chat wakes for priority/express queue tiering.
+              triggeredBy: "board",
+              conversationChat: true,
             },
           });
         } catch (error) {

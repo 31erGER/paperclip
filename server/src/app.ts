@@ -144,6 +144,7 @@ import { agentSetupProgressAgentRoutes, agentSetupProgressBoardRoutes } from "./
 import { setWorkloadIdentityConfiguredPublicOrigin } from "./services/workload-identity.js";
 import { executionWorkspaceRoutes } from "./routes/execution-workspaces.js";
 import { goalRoutes } from "./routes/goals.js";
+import { vaultRoutes } from "./routes/vault.js"; // fork 31erGER
 import { responsibilityRoutes } from "./routes/responsibilities.js";
 import { responsibilityAreaRoutes } from "./routes/responsibility-areas.js";
 import { responsibilityBarRoutes } from "./routes/responsibility-bars.js";
@@ -863,6 +864,7 @@ export async function createApp(
   api.use(projectToolRoutes(db));
   api.use(taskWorkspaceRoutes(db));
   api.use(projectRoutes(db));
+  api.use(vaultRoutes(db)); // fork 31erGER
   api.use(caseRoutes(db, opts.storageService));
   api.use(caseHandoffRoutes(db));
   api.use(workflowRoutes(db));

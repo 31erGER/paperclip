@@ -15,6 +15,7 @@ import {
   Layers,
   GitBranch,
   Package,
+  BookOpen, // fork 31erGER
   Settings,
   FolderOpen,
   Unplug,
@@ -187,6 +188,7 @@ export function Sidebar() {
             />
           ) : null}
           <SidebarNavItem to="/artifacts" label="Artifacts" icon={Package} />
+          <SidebarNavItem to="/vault" label="Vault" icon={BookOpen} /> {/* fork 31erGER */}
           <SidebarNavItem to="/skills" label="Skills" icon={Boxes} />
           {showWorkspacesLink ? (
             <SidebarNavItem to="/workspaces" label="Workspaces" icon={GitBranch} />

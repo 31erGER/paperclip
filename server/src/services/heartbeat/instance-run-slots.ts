@@ -21,6 +21,65 @@ import { resolveDeploymentProfile } from "../../lib/deployment-profile.js";
 /** Advisory lock key that serializes instance-wide slot checks ("pclp" + 1). */
 const INSTANCE_RUN_SLOT_LOCK_KEY = 0x70636c70_01;
 
+/**
+ * Number of extra express/steering slots reserved above `maxConcurrentAgentRuns`
+ * so direct board messages to the CEO/coordinator or explicitly promoted ("Send now")
+ * messages can run in parallel (e.g. 1 worker task + 1 CEO/steering session on
+ * LM Studio) without ever waiting hours behind a background task queue.
+ */
+export const EXPRESS_STEERING_EXTRA_SLOTS = 1;
+
+export interface RunSlotPriorityInput {
+  invocationSource?: string | null;
+  triggerDetail?: string | null;
+  contextSnapshot?: Record<string, unknown> | null;
+  agentRole?: string | null;
+  agentReportsTo?: string | null;
+}
+
+/**
+ * Priority tier for cross-agent queue promotion (lower number = starts first):
+ *   0 — Explicitly promoted by the board ("Send now" / interrupt / steer priority)
+ *   1 — Board/user direct message to an executive / coordinator agent (CEO or root agent)
+ *   2 — Any other board/user direct message (chat or comment)
+ *   3 — Background work (agent-to-agent tasks, assignments, timers, continuations)
+ */
+export function runQueuePriorityTier(input: RunSlotPriorityInput): 0 | 1 | 2 | 3 {
+  const ctx =
+    input.contextSnapshot && typeof input.contextSnapshot === "object"
+      ? input.contextSnapshot
+      : {};
+  const explicitPriority =
+    ctx.prioritySlot === true ||
+    ctx.steerPriority === true ||
+    typeof ctx.queuedCommentInterruptId === "string" ||
+    typeof ctx.interruptedRunId === "string";
+  if (explicitPriority) return 0;
+
+  const isBoardTriggered =
+    input.invocationSource === "on_demand" ||
+    input.triggerDetail === "manual" ||
+    ctx.triggeredBy === "board" ||
+    ctx.conversationChat === true;
+
+  const isExecutiveCoordinator =
+    input.agentRole === "ceo" || input.agentReportsTo === null;
+
+  if (isBoardTriggered && isExecutiveCoordinator) return 1;
+  if (isBoardTriggered) return 2;
+  return 3;
+}
+
+/**
+ * Returns true when a run may claim the reserved +1 express/steering slot
+ * beyond `maxConcurrentAgentRuns` (Tier 0 promoted runs or Tier 1 executive
+ * coordinator direct board messages).
+ */
+export function isExpressSlotEligible(input: RunSlotPriorityInput): boolean {
+  const tier = runQueuePriorityTier(input);
+  return tier === 0 || tier === 1;
+}
+
 type SettingsReader = Pick<Db, "select">;
 
 /** Effective instance-wide limit, or null when unlimited. */
@@ -52,14 +111,20 @@ export class InstanceRunSlotsFull extends Error {
  *
  * `replacedRunIds` are runs the claiming run supersedes (itself, the run it
  * retries); they do not count as occupying a slot.
+ *
+ * When `options.express` is true (fork 31erGER), the run may use the +1
+ * reserved express/steering slot beyond `limit` so the board can always reach
+ * the CEO/coordinator or immediately run a promoted message while a worker task runs.
  */
 export async function assertInstanceRunSlotFree(
   tx: Pick<Db, "select" | "execute">,
   replacedRunIds: string[],
   profile: DeploymentProfile = resolveDeploymentProfile(),
+  options: { express?: boolean } = {},
 ): Promise<void> {
   const limit = await readInstanceRunLimit(tx, profile);
   if (limit === null) return;
+  const effectiveLimit = options.express ? limit + EXPRESS_STEERING_EXTRA_SLOTS : limit;
   await tx.execute(sql`select pg_advisory_xact_lock(${INSTANCE_RUN_SLOT_LOCK_KEY})`);
   const [running] = await tx
     .select({ count: sql<number>`count(*)::int` })
@@ -69,5 +134,5 @@ export async function assertInstanceRunSlotFree(
       replacedRunIds.length > 0 ? notInArray(heartbeatRuns.id, replacedRunIds) : undefined,
     ));
   const count = Number(running?.count ?? 0);
-  if (count >= limit) throw new InstanceRunSlotsFull(count, limit);
+  if (count >= effectiveLimit) throw new InstanceRunSlotsFull(count, effectiveLimit);
 }

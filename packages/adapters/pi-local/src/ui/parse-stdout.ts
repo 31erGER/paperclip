@@ -39,6 +39,220 @@ function extractTextContent(content: string | Array<{ type: string; text?: strin
 // Track pending tool calls for proper toolUseId matching
 let pendingToolCalls = new Map<string, { toolName: string; args: unknown }>();
 
+// fork 31erGER: extract diff transcript entries for Pi edit/write tool executions.
+const MAX_DIFF_LINES = 300;
+const EDIT_TOOL_NAMES = new Set(["edit", "edit_file", "str_replace", "str_replace_editor", "patch", "apply_patch"]);
+const WRITE_TOOL_NAMES = new Set(["write", "write_file", "create_file"]);
+
+function extractFilePathFromArgs(args: unknown): string {
+  const rec = asRecord(args);
+  if (!rec) return "";
+  return (
+    asString(rec.path) ||
+    asString(rec.file_path) ||
+    asString(rec.filePath) ||
+    asString(rec.filename) ||
+    ""
+  );
+}
+
+function buildDiffEntriesFromLines(
+  lines: Array<{ changeType: "add" | "remove" | "context" | "hunk"; text: string }>,
+  filePath: string,
+  toolUseId: string,
+  ts: string,
+  additions: number,
+  deletions: number,
+): TranscriptEntry[] {
+  if (lines.length === 0) return [];
+  const entries: TranscriptEntry[] = [];
+  if (filePath) {
+    entries.push({
+      kind: "diff",
+      ts,
+      changeType: "file_header",
+      text: filePath,
+      toolUseId,
+      additions,
+      deletions,
+    });
+  }
+  const truncated = lines.length > MAX_DIFF_LINES;
+  const kept = truncated ? lines.slice(0, MAX_DIFF_LINES) : lines;
+  for (const line of kept) {
+    entries.push({
+      kind: "diff",
+      ts,
+      changeType: line.changeType,
+      text: line.text,
+      toolUseId,
+    });
+  }
+  if (truncated) {
+    entries.push({
+      kind: "diff",
+      ts,
+      changeType: "truncation",
+      text: "Diff shortened for display.",
+      toolUseId,
+    });
+  }
+  return entries;
+}
+
+function parsePiDiffString(
+  diffText: string,
+  filePath: string,
+  toolUseId: string,
+  ts: string,
+): TranscriptEntry[] {
+  const rawLines = diffText.replace(/\r\n/g, "\n").split("\n");
+  if (rawLines.length > 0 && rawLines[rawLines.length - 1] === "") {
+    rawLines.pop();
+  }
+  const parsed: Array<{ changeType: "add" | "remove" | "context" | "hunk"; text: string }> = [];
+  let additions = 0;
+  let deletions = 0;
+
+  for (const line of rawLines) {
+    if (line.startsWith("+++ ") || line.startsWith("--- ")) continue;
+    if (line.startsWith("@@")) {
+      parsed.push({ changeType: "hunk", text: line });
+      continue;
+    }
+    if (/^\s*\.\.\.\s*$/.test(line)) {
+      parsed.push({ changeType: "hunk", text: "…" });
+      continue;
+    }
+    if (line.startsWith("+")) {
+      additions += 1;
+      parsed.push({ changeType: "add", text: line.slice(1) });
+    } else if (line.startsWith("-")) {
+      deletions += 1;
+      parsed.push({ changeType: "remove", text: line.slice(1) });
+    } else if (line.startsWith(" ")) {
+      parsed.push({ changeType: "context", text: line.slice(1) });
+    } else {
+      parsed.push({ changeType: "context", text: line });
+    }
+  }
+
+  return buildDiffEntriesFromLines(parsed, filePath, toolUseId, ts, additions, deletions);
+}
+
+function buildDiffFromReplacementPairs(
+  pairs: Array<{ oldText: string; newText: string }>,
+  filePath: string,
+  toolUseId: string,
+  ts: string,
+): TranscriptEntry[] {
+  const parsed: Array<{ changeType: "add" | "remove" | "context" | "hunk"; text: string }> = [];
+  let additions = 0;
+  let deletions = 0;
+
+  pairs.forEach((pair, pairIndex) => {
+    if (pairIndex > 0) {
+      parsed.push({ changeType: "hunk", text: "…" });
+    }
+    const oldLines = pair.oldText ? pair.oldText.replace(/\r\n/g, "\n").split("\n") : [];
+    const newLines = pair.newText ? pair.newText.replace(/\r\n/g, "\n").split("\n") : [];
+
+    // Trim shared prefix & suffix lines, keeping up to 2 context lines around the edit.
+    let prefix = 0;
+    while (
+      prefix < oldLines.length &&
+      prefix < newLines.length &&
+      oldLines[prefix] === newLines[prefix]
+    ) {
+      prefix += 1;
+    }
+    let suffix = 0;
+    while (
+      suffix < oldLines.length - prefix &&
+      suffix < newLines.length - prefix &&
+      oldLines[oldLines.length - 1 - suffix] === newLines[newLines.length - 1 - suffix]
+    ) {
+      suffix += 1;
+    }
+
+    const leadingContext = oldLines.slice(Math.max(0, prefix - 2), prefix);
+    const removed = oldLines.slice(prefix, oldLines.length - suffix);
+    const added = newLines.slice(prefix, newLines.length - suffix);
+    const trailingContext = oldLines.slice(oldLines.length - suffix, Math.min(oldLines.length, oldLines.length - suffix + 2));
+
+    for (const line of leadingContext) parsed.push({ changeType: "context", text: line });
+    for (const line of removed) {
+      deletions += 1;
+      parsed.push({ changeType: "remove", text: line });
+    }
+    for (const line of added) {
+      additions += 1;
+      parsed.push({ changeType: "add", text: line });
+    }
+    for (const line of trailingContext) parsed.push({ changeType: "context", text: line });
+  });
+
+  return buildDiffEntriesFromLines(parsed, filePath, toolUseId, ts, additions, deletions);
+}
+
+function extractPiToolDiffEntries(
+  toolName: string,
+  args: unknown,
+  result: unknown,
+  isError: boolean,
+  toolUseId: string,
+  ts: string,
+): TranscriptEntry[] {
+  if (isError) return [];
+  const normalizedName = toolName.trim().toLowerCase();
+  const filePath = extractFilePathFromArgs(args);
+
+  // 1. Prefer Pi's native edit tool diff payload (`result.details.diff`).
+  const resultObj = asRecord(result);
+  const detailsObj = resultObj ? asRecord(resultObj.details) : null;
+  const nativeDiff = detailsObj ? asString(detailsObj.diff) : "";
+  if (nativeDiff) {
+    return parsePiDiffString(nativeDiff, filePath, toolUseId, ts);
+  }
+
+  // 2. Fallback for edit tools without `details.diff` (uses oldText/newText or edits[]).
+  const argsObj = asRecord(args);
+  if (argsObj && EDIT_TOOL_NAMES.has(normalizedName)) {
+    const pairs: Array<{ oldText: string; newText: string }> = [];
+    if (Array.isArray(argsObj.edits)) {
+      for (const rawEdit of argsObj.edits) {
+        const editRec = asRecord(rawEdit);
+        if (!editRec) continue;
+        const oldText = asString(editRec.oldText) || asString(editRec.old_string);
+        const newText = asString(editRec.newText) || asString(editRec.new_string);
+        if (oldText || newText) pairs.push({ oldText, newText });
+      }
+    } else {
+      const oldText = asString(argsObj.oldText) || asString(argsObj.old_string);
+      const newText = asString(argsObj.newText) || asString(argsObj.new_string);
+      if (oldText || newText) pairs.push({ oldText, newText });
+    }
+    if (pairs.length > 0) {
+      return buildDiffFromReplacementPairs(pairs, filePath, toolUseId, ts);
+    }
+  }
+
+  // 3. Write/create tools: represent written file content as added diff lines.
+  if (argsObj && WRITE_TOOL_NAMES.has(normalizedName)) {
+    const content = typeof argsObj.content === "string" ? argsObj.content : null;
+    if (content !== null) {
+      const rawLines = content.replace(/\r\n/g, "\n").split("\n");
+      if (rawLines.length > 1 && rawLines[rawLines.length - 1] === "") {
+        rawLines.pop();
+      }
+      const parsed = rawLines.map((line) => ({ changeType: "add" as const, text: line }));
+      return buildDiffEntriesFromLines(parsed, filePath, toolUseId, ts, parsed.length, 0);
+    }
+  }
+
+  return [];
+}
+
 export function resetParserState(): void {
   pendingToolCalls.clear();
 }
@@ -61,35 +275,36 @@ export function parsePiStdoutLine(line: string, ts: string): TranscriptEntry[] {
     type === "extension_ui_request" ||
     type === "extension_ui_response" ||
     type === "extension_error" ||
+    type === "entry_appended" ||
     type === "paperclip_progress"
   ) {
     return [];
   }
 
   // Agent lifecycle
+  if (type === "session") {
+    // fork 31erGER: keep session header as a system log entry instead of raw JSON stdout.
+    const cwd = asString(parsed.cwd);
+    return [{ kind: "system", ts, text: cwd ? `Pi session started (${cwd})` : "Pi session started" }];
+  }
+
   if (type === "agent_start") {
     return [{ kind: "system", ts, text: "🚀 Pi agent started" }];
   }
 
+  if (type === "agent_settled") {
+    return [];
+  }
+
   if (type === "agent_end") {
     const entries: TranscriptEntry[] = [];
-    
-    // Extract final message from messages array if available
+
+    // fork 31erGER: assistant text and thinking are already streamed via
+    // message_update deltas; extract only final usage from agent_end.
     const messages = parsed.messages as Array<Record<string, unknown>> | undefined;
     if (messages && messages.length > 0) {
       const lastMessage = messages[messages.length - 1];
       if (lastMessage?.role === "assistant") {
-        const content = lastMessage.content as string | Array<{ type: string; text?: string; thinking?: string }>;
-        const { text, thinking } = extractTextContent(content);
-        
-        if (thinking) {
-          entries.push({ kind: "thinking", ts, text: thinking });
-        }
-        if (text) {
-          entries.push({ kind: "assistant", ts, text });
-        }
-        
-        // Extract usage
         const usage = asRecord(lastMessage.usage);
         if (usage) {
           const inputTokens = (usage.inputTokens ?? usage.input ?? 0) as number;
@@ -97,7 +312,7 @@ export function parsePiStdoutLine(line: string, ts: string): TranscriptEntry[] {
           const cachedTokens = (usage.cacheRead ?? usage.cachedInputTokens ?? 0) as number;
           const costRecord = asRecord(usage.cost);
           const costUsd = (costRecord?.total ?? usage.costUsd ?? 0) as number;
-          
+
           if (inputTokens > 0 || outputTokens > 0) {
             entries.push({
               kind: "result",
@@ -115,11 +330,11 @@ export function parsePiStdoutLine(line: string, ts: string): TranscriptEntry[] {
         }
       }
     }
-    
+
     if (entries.length === 0) {
       entries.push({ kind: "system", ts, text: "✅ Pi agent finished" });
     }
-    
+
     return entries;
   }
 
@@ -129,60 +344,9 @@ export function parsePiStdoutLine(line: string, ts: string): TranscriptEntry[] {
   }
 
   if (type === "turn_end") {
-    const message = asRecord(parsed.message);
-    const toolResults = parsed.toolResults as Array<Record<string, unknown>> | undefined;
-    
-    const entries: TranscriptEntry[] = [];
-    
-    if (message) {
-      const content = message.content as string | Array<{ type: string; text?: string; thinking?: string }>;
-      const { text, thinking } = extractTextContent(content);
-      
-      if (thinking) {
-        entries.push({ kind: "thinking", ts, text: thinking });
-      }
-      if (text) {
-        entries.push({ kind: "assistant", ts, text });
-      }
-    }
-    
-    // Process tool results - match with pending tool calls
-    if (toolResults) {
-      for (const tr of toolResults) {
-        const toolCallId = asString(tr.toolCallId, `tool-${Date.now()}`);
-        const content = tr.content;
-        const isError = tr.isError === true;
-        
-        // Extract text from Pi's content array format
-        let contentStr: string;
-        if (typeof content === "string") {
-          contentStr = content;
-        } else if (Array.isArray(content)) {
-          const extracted = extractTextContent(content as Array<{ type: string; text?: string }>);
-          contentStr = extracted.text || JSON.stringify(content);
-        } else {
-          contentStr = JSON.stringify(content);
-        }
-        
-        // Get tool name from pending calls if available
-        const pendingCall = pendingToolCalls.get(toolCallId);
-        const toolName = asString(tr.toolName, pendingCall?.toolName || "tool");
-        
-        entries.push({
-          kind: "tool_result",
-          ts,
-          toolUseId: toolCallId,
-          toolName,
-          content: contentStr,
-          isError,
-        });
-        
-        // Clean up pending call
-        pendingToolCalls.delete(toolCallId);
-      }
-    }
-    
-    return entries;
+    // fork 31erGER: thinking, assistant text, and tool results are already
+    // emitted by message_update and tool_execution_end; skip duplicate summaries.
+    return [];
   }
 
   // Message streaming
@@ -194,7 +358,7 @@ export function parsePiStdoutLine(line: string, ts: string): TranscriptEntry[] {
     const assistantEvent = asRecord(parsed.assistantMessageEvent);
     if (assistantEvent) {
       const msgType = asString(assistantEvent.type);
-      
+
       // Handle thinking deltas
       if (msgType === "thinking_delta") {
         const delta = asString(assistantEvent.delta);
@@ -202,7 +366,7 @@ export function parsePiStdoutLine(line: string, ts: string): TranscriptEntry[] {
           return [{ kind: "thinking", ts, text: delta, delta: true }];
         }
       }
-      
+
       // Handle text deltas
       if (msgType === "text_delta") {
         const delta = asString(assistantEvent.delta);
@@ -210,21 +374,17 @@ export function parsePiStdoutLine(line: string, ts: string): TranscriptEntry[] {
           return [{ kind: "assistant", ts, text: delta, delta: true }];
         }
       }
-      
-      // Handle thinking end - emit full thinking block
+
+      // fork 31erGER: mark streamed thinking block complete without duplicating text.
       if (msgType === "thinking_end") {
-        const content = asString(assistantEvent.content);
-        if (content) {
-          return [{ kind: "thinking", ts, text: content }];
+        if (asString(assistantEvent.content)) {
+          return [{ kind: "thinking", ts, text: "", delta: true, lifecycle: "completed" }];
         }
       }
-      
-      // Handle text end - emit full text block
+
+      // fork 31erGER: text_delta already streamed the assistant text.
       if (msgType === "text_end") {
-        const content = asString(assistantEvent.content);
-        if (content) {
-          return [{ kind: "assistant", ts, text: content }];
-        }
+        return [];
       }
     }
     return [];
@@ -233,22 +393,36 @@ export function parsePiStdoutLine(line: string, ts: string): TranscriptEntry[] {
   if (type === "message_end") {
     const message = asRecord(parsed.message);
     if (message) {
+      // fork 31erGER: respect message.role so user wake payloads stay out of
+      // assistant chat bubbles and toolResult entries do not duplicate tool_execution_end.
+      const role = asString(message.role);
       const content = message.content as string | Array<{ type: string; text?: string; thinking?: string }>;
-      const { text, thinking } = extractTextContent(content);
-      
-      const entries: TranscriptEntry[] = [];
-      
-      // Emit final thinking block if present
-      if (thinking) {
-        entries.push({ kind: "thinking", ts, text: thinking });
+
+      if (role === "user") {
+        const { text } = extractTextContent(content);
+        if (text.trim()) {
+          return [{ kind: "user", ts, text }];
+        }
+        return [];
       }
-      
-      // Emit final text block if present
-      if (text) {
-        entries.push({ kind: "assistant", ts, text });
+
+      if (role === "system") {
+        const { text } = extractTextContent(content);
+        if (text.trim()) {
+          return [{ kind: "system", ts, text }];
+        }
+        return [];
       }
-      
-      return entries;
+
+      if (role === "assistant") {
+        const errorMessage = asString(message.errorMessage);
+        if (errorMessage) {
+          return [{ kind: "stderr", ts, text: errorMessage }];
+        }
+        return [];
+      }
+
+      return [];
     }
     return [];
   }
@@ -300,17 +474,30 @@ export function parsePiStdoutLine(line: string, ts: string): TranscriptEntry[] {
       contentStr = String(result);
     }
     
-    // Clean up pending call
+    // fork 31erGER: read pending call args before cleanup so edit/write diff entries can be emitted.
+    const pendingCall = pendingToolCalls.get(toolCallId);
     pendingToolCalls.delete(toolCallId);
-    
-    return [{
-      kind: "tool_result",
-      ts,
-      toolUseId: toolCallId,
+
+    const diffEntries = extractPiToolDiffEntries(
       toolName,
-      content: contentStr,
+      pendingCall?.args,
+      result,
       isError,
-    }];
+      toolCallId,
+      ts,
+    );
+
+    return [
+      {
+        kind: "tool_result",
+        ts,
+        toolUseId: toolCallId,
+        toolName,
+        content: contentStr,
+        isError,
+      },
+      ...diffEntries,
+    ];
   }
 
   // Fallback for unknown event types

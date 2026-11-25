@@ -34,6 +34,7 @@ import {
   asNumber,
   asStringArray,
   parseObject,
+  buildCompanyVaultGuidance, // fork 31erGER
   buildPaperclipEnv,
   buildRuntimeToolsEnv,
   joinPromptSections,
@@ -61,6 +62,8 @@ import { isPiUnknownSessionError, parsePiJsonl, createPiJsonlParser } from "./pa
 import { createPiStdoutCompactor, resolvePiStdoutLogMode } from "./stdout-compaction.js";
 import { ensurePiModelConfiguredAndAvailable } from "./models.js";
 import { preparePiRuntimeConfig } from "./runtime-config.js";
+import { hostPiConfigLinkEnabled } from "./host-agent-config.js"; // fork 31erGER
+import { createPiRpcSession, piRpcSteeringEnabled } from "./live-steering.js"; // fork 31erGER
 import { preparePiOpenRouterExtension } from "./openrouter-extension.js";
 import { SANDBOX_INSTALL_COMMAND } from "../index.js";
 
@@ -643,7 +646,10 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         run: { id: runId, source: "on_demand" },
         context,
       };
-      const renderedSystemPromptExtension = renderTemplate(systemPromptExtension, templateData);
+      const renderedSystemPromptExtension = [
+        renderTemplate(systemPromptExtension, templateData),
+        buildCompanyVaultGuidance(env.PAPERCLIP_VAULT_DIR, env.PAPERCLIP_VAULT_API), // fork 31erGER
+      ].filter(Boolean).join("\n\n");
       const systemOwnsDefaultPolicy = !hasCustomPromptTemplate || Boolean(resolvedInstructionsFilePath && !instructionsReadFailed);
       const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
 
@@ -666,12 +672,20 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         return notes;
       })();
 
+      // fork 31erGER: run local Pi in `--mode rpc` so board users and executive/manager
+      // agents can steer active turns mid-run via stdin JSON commands (identical to Pi TUI).
+      const useLocalRpcSteering = !executionTargetIsRemote && piRpcSteeringEnabled(runtimeEnv);
+
       const buildArgs = (sessionFile: string, userPrompt: string): string[] => {
         const args: string[] = [];
 
-        // Use JSON mode for structured output with print mode (non-interactive)
-        args.push("--mode", "json");
-        args.push("-p"); // Non-interactive mode: process prompt and exit
+        if (useLocalRpcSteering) {
+          args.push("--mode", "rpc");
+        } else {
+          // Use JSON mode for structured output with print mode (non-interactive)
+          args.push("--mode", "json");
+          args.push("-p"); // Non-interactive mode: process prompt and exit
+        }
 
         // Use --append-system-prompt to extend Pi's default system prompt
         args.push("--append-system-prompt", renderedSystemPromptExtension);
@@ -680,15 +694,24 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         if (modelId) args.push("--model", modelId);
         if (thinking) args.push("--thinking", thinking);
 
-        args.push("--tools", "read,bash,edit,write,grep,find,ls");
+        // fork 31erGER: when host Pi extensions are linked, use +name modifiers so Pi keeps
+        // extension-registered tools (such as web-tools search/fetch) active alongside the
+        // built-in defaults instead of replacing them with a strict allowlist.
+        const useHostExtensions = !executionTargetIsRemote && hostPiConfigLinkEnabled();
+        args.push(
+          "--tools",
+          useHostExtensions ? "+grep,+find,+ls" : "read,bash,edit,write,grep,find,ls",
+        );
         args.push("--session", sessionFile);
         args.push("--skill", remoteSkillsDir ?? PI_AGENT_SKILLS_DIR);
 
         if (extraArgs.length > 0) args.push(...extraArgs);
         args.push("--extension", attributionExtensionPath);
 
-        // Add the user prompt as the last argument
-        args.push(userPrompt);
+        // RPC mode sends the prompt via stdin; print mode passes it as the last positional arg.
+        if (!useLocalRpcSteering) {
+          args.push(userPrompt);
+        }
 
         return args;
       };
@@ -745,11 +768,15 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
           });
         }
 
+        // fork 31erGER: attach live Pi RPC session controller when running locally in --mode rpc.
+        const rpcSession = useLocalRpcSteering ? createPiRpcSession(runId, userPrompt) : null;
+
         // Buffer stdout by lines to handle partial JSON chunks
         let stdoutBuffer = "";
         const compactStdoutLine = createPiStdoutCompactor(stdoutLogMode);
         // Compaction only affects the persisted run log; parsePiJsonl reads the unfiltered proc.stdout.
         const emitCompacted = async (line: string, suffix: string) => {
+          rpcSession?.onStdoutLine(line);
           const compacted = compactStdoutLine(line);
           if (compacted !== null) {
             await onLog("stdout", compacted + suffix);
@@ -781,18 +808,24 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
           const parsed = consumeAccounting(stdout);
           return { usage: parsed.usage, costUsd: parsed.usage.costUsd, usageBasis: "per_run", provider, biller: resolvePiBiller(runtimeEnv, provider), billingType: "unknown", model, complete: parsed.sawAgentEnd };
         });
-        const proc = await runAdapterExecutionTargetProcess(runId, runtimeExecutionTarget, command, args, {
-          onProcessStopped: providerStop.beginInvocation(),
-          cwd,
-          env: executionTargetIsRemote ? env : runtimeEnv,
-          timeoutSec,
-          graceSec,
-          onSpawn,
-          onRuntimeProgress: ctx.onRuntimeProgress,
-          onLog: accountingLog,
-          runLogTail: paperclipBridge?.runLogTail,
-          settleRunDisposition: paperclipBridge?.settleRunDisposition,
-        });
+        let proc;
+        try {
+          proc = await runAdapterExecutionTargetProcess(runId, runtimeExecutionTarget, command, args, {
+            onProcessStopped: providerStop.beginInvocation(),
+            cwd,
+            env: executionTargetIsRemote ? env : runtimeEnv,
+            timeoutSec,
+            graceSec,
+            onSpawn,
+            onStdinReady: rpcSession ? (stdin) => rpcSession.attachStdin(stdin) : undefined,
+            onRuntimeProgress: ctx.onRuntimeProgress,
+            onLog: accountingLog,
+            runLogTail: paperclipBridge?.runLogTail,
+            settleRunDisposition: paperclipBridge?.settleRunDisposition,
+          });
+        } finally {
+          rpcSession?.dispose();
+        }
         await accountingLog.flush();
 
         // Flush any remaining buffer content

@@ -294,6 +294,8 @@ export interface AdapterExecutionTargetProcessOptions {
   cwd: string;
   env: Record<string, string>;
   stdin?: string;
+  /** fork 31erGER: keep local child stdin open for interactive RPC steering. */
+  onStdinReady?: (stdin: NodeJS.WritableStream) => void;
   timeoutSec: number;
   graceSec: number;
   /** Sandbox-only: request the provider's persistent process session for a
@@ -983,6 +985,7 @@ export async function runAdapterExecutionTargetProcess(
     cwd: options.cwd,
     env,
     stdin: options.stdin,
+    onStdinReady: options.onStdinReady,
     timeoutSec: options.timeoutSec,
     graceSec: options.graceSec,
     onLog: options.onLog,

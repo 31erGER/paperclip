@@ -26,6 +26,7 @@ import {
   LayoutGrid,
   Users,
   Compass,
+  BookOpen, // fork 31erGER
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -241,6 +242,7 @@ function ClassicSidebar({ children }: { children?: ReactNode }) {
           ) : null}
           <SidebarNavItem to="/routines" label="Routines" icon={Repeat} />
           <SidebarNavItem to="/artifacts" label="Artifacts" icon={Package} />
+          <SidebarNavItem to="/vault" label="Vault" icon={BookOpen} /> {/* fork 31erGER */}
           {showCases ? (
             <SidebarNavItem to="/cases" label="Cases" icon={Layers} textBadge="beta" />
           ) : null}

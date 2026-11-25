@@ -3,6 +3,7 @@ import type { IssueQueuedCommentQueue } from "@paperclipai/shared";
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { assertQueuedCommentInteractionDelivery, recheckQueuedCommentInteractionDelivery } from "../../../services/agent-interaction-delivery.js";
 import { deliverSteeredMessage, steeringDeliveryIsUncertain } from "../../../services/queued-comment-steering.js";
+import { canSteerLocalRun } from "../../../services/local-steering.js"; // fork 31erGER
 import { acceptSteeredIdentity, rejectSteeredIdentity, reserveSteeredIdentity, type RunIdentityContext } from "../../../services/run-identity.js";
 import {
   buildQueuedCommentQueueSnapshot,
@@ -213,13 +214,22 @@ export async function readBoardQueuedComments(input: {
     assignedAgentAdapterType: assignedAgent?.adapterType ?? null,
     queuedCommentCount: comments.length,
   });
+  // fork 31erGER: local Pi RPC runs support live mid-turn steering (both tasks and chats).
+  const localSteerable = Boolean(
+    input.activeRun?.status === "running" &&
+    queueState?.state === "deferred" &&
+    comments.length > 0 &&
+    canSteerLocalRun(input.activeRun.id),
+  );
   const steeringDisposition: IssueQueuedCommentQueue["steeringDisposition"] =
-    input.issue.conversationAgentId ? "unsupported" : steering.kind !== "probe"
-      ? steering.kind
-      : input.steeringDisposition
-        ?? (await getNativeSessionSteeringState(steering.steeringRunId)
-          .then((state) => state.disposition)
-          .catch(() => "temporarily_unavailable" as const));
+    localSteerable
+      ? "available"
+      : input.issue.conversationAgentId ? "unsupported" : steering.kind !== "probe"
+        ? steering.kind
+        : input.steeringDisposition
+          ?? (await getNativeSessionSteeringState(steering.steeringRunId)
+            .then((state) => state.disposition)
+            .catch(() => "temporarily_unavailable" as const));
   const wait = queueState?.state === "deferred" ? parseObject(parseObject(wake?.payload).executionWait) : {};
   // The user's Interrupt click is delivering these messages. Its stopped run
   // settling is not something to read about under the composer; the task
@@ -233,7 +243,8 @@ export async function readBoardQueuedComments(input: {
     queueId: wake?.id ?? null,
     state: queueState?.state ?? null,
     activeRunId: input.activeRun?.id ?? null,
-    protocol: steering.protocol,
+    // fork 31erGER: live local Pi RPC runs support same-turn steering like paperclip_runner_v1.
+    protocol: localSteerable ? "paperclip_runner_v1" : steering.protocol,
     steeringDisposition,
     comments,
     actorType: input.actor.actorType,
@@ -370,9 +381,12 @@ async function readLockedBoardQueue(
     actor: input.actor,
     queueState,
     steeringDisposition:
-      activeRun?.runtimeMode === "native"
-        ? "temporarily_unavailable"
-        : "unsupported",
+      // fork 31erGER: allow steering local Pi RPC runs.
+      activeRun?.status === "running" && canSteerLocalRun(activeRun.id)
+        ? "available"
+        : activeRun?.runtimeMode === "native"
+          ? "temporarily_unavailable"
+          : "unsupported",
   });
   return { activeRun, wake, queueRun, state, queue, queueState };
 }

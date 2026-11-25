@@ -640,6 +640,12 @@ export const queryKeys = {
     byAgent: (companyId: string, agentId: string) =>
       ["artifacts", companyId, "by-agent", agentId] as const,
   },
+  // fork 31erGER: Company Vault queries
+  vault: {
+    index: (companyId: string) => ["vault", companyId, "index"] as const,
+    file: (companyId: string, path: string) => ["vault", companyId, "file", path] as const,
+    search: (companyId: string, query: string) => ["vault", companyId, "search", query] as const,
+  },
   budgets: {
     overview: (companyId: string) =>
       ["budgets", "overview", companyId] as const,

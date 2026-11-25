@@ -70,6 +70,7 @@ load_node() {
 
 export_defaults() {
   export PAPERCLIP_DEPLOYMENT_PROFILE="${PAPERCLIP_DEPLOYMENT_PROFILE:-local_only}"
+  export PAPERCLIP_VAULT_ROOT="${PAPERCLIP_VAULT_ROOT:-$REPO_ROOT/vaults}"
   export HOST="${HOST:-127.0.0.1}"
   export PORT="${PORT:-3100}"
 }

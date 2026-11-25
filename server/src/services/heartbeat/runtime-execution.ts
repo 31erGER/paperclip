@@ -890,6 +890,9 @@ export async function executeHeartbeatRuntime(db: Db, input: HeartbeatRuntimeExe
       if (managedMcpConfig) {
         adapterContext.paperclipManagedMcp = managedMcpConfig;
       }
+      // fork 31erGER: ensure the company's shared Vault folder is initialized before the agent runs.
+      const { ensureCompanyVault } = await import("../vault.js");
+      await ensureCompanyVault(agent.companyId).catch(() => {});
       const guardedDispatch =
         await dispatchWithTiming(
           (markDispatchStarted) => {

@@ -61,6 +61,13 @@ import { reconstructNativeWorkspace, unreconciledNativeExportPredicate } from ".
 import { reconstructWorkspaceSchema } from "@paperclipai/shared";
 import { hasQueuedInteractionResponse } from "../services/queued-interaction-response.js";
 import { deliverConversationComments, heldConversationComments, isConversation } from "../services/agent-conversations.js";
+// fork 31erGER: live local Pi RPC steering and express queue promotion.
+import {
+  canSteerLocalRun,
+  promoteQueuedIssueRunToExpressSlot,
+  steerLocalRun,
+  trySteerActiveLocalRunFromAgentComment,
+} from "../services/local-steering.js";
 import { assertOnboardingFirstTaskDependenciesAllowed } from "../services/onboarding-first-task-admission.js";
 import { resolveChatTaskAssignment } from "../services/chat-task-assignment.js";
 import { issueRecoveryActionReadModel } from "../services/issue-recovery-actions.js";
@@ -17584,12 +17591,27 @@ export function issueRoutes(
         }
       }
       const actor = getActorInfo(req);
-      const interruptPlan = await runQueuedCommentMutation(() => db.transaction(async (tx): Promise<{ firstTurnRunId: string } | { runToInterrupt: string | null }> => {
+      const interruptPlan = await runQueuedCommentMutation(() => db.transaction(async (tx): Promise<{ firstTurnRunId: string } | { promotedQueuedRunId: string } | { runToInterrupt: string | null }> => {
         const locked = await queuedCommentQueue.lockBoardQueue({
           tx, issue, actor, queueId: req.body.queueId, targetRunId: req.body.targetRunId ?? undefined,
           allowStoppedTarget: true,
         });
         requireQueuedCommentMutationTarget(locked.queue, req.body.queueId, req.body.revision);
+        // fork 31erGER: when a queued message belongs to a run waiting in the
+        // instance concurrency queue (`state === "queued"`), clicking Send promotes
+        // that run to the +1 express slot so it starts immediately without killing
+        // another agent's task.
+        if (locked.state === "queued" && locked.queueRun?.status === "queued" && locked.queue.entries.length > 0) {
+          await tx.update(heartbeatRuns).set({
+            contextSnapshot: sql`coalesce(${heartbeatRuns.contextSnapshot}, '{}'::jsonb) || '{"prioritySlot": true}'::jsonb`,
+            updatedAt: new Date(),
+          }).where(and(
+            eq(heartbeatRuns.id, locked.queueRun.id),
+            eq(heartbeatRuns.companyId, issue.companyId),
+            eq(heartbeatRuns.status, "queued"),
+          ));
+          return { promotedQueuedRunId: locked.queueRun.id };
+        }
         // Explicit Interrupt is also the fallback when a native turn cannot
         // accept steering. Cancellation and ordinary admission still own Stop
         // confirmation, cleanup, and delivery; this click only records intent.
@@ -17625,6 +17647,7 @@ export function issueRoutes(
         return { runToInterrupt: locked.activeRun?.status === "running" ? locked.activeRun.id : null };
       }));
       const firstTurnRunId = "firstTurnRunId" in interruptPlan ? interruptPlan.firstTurnRunId : null;
+      const promotedQueuedRunId = "promotedQueuedRunId" in interruptPlan ? interruptPlan.promotedQueuedRunId : null;
       const runToInterrupt = "runToInterrupt" in interruptPlan ? interruptPlan.runToInterrupt : null;
       // Never hold the issue lock while joining the adapter. Queue edits and
       // discards stay authoritative until the dispatcher claims the successor.
@@ -17634,12 +17657,18 @@ export function issueRoutes(
         suppressImmediateRecovery: true,
         resultJson: { ...options.resultJson, queuedCommentInterruptQueueId: req.body.queueId },
       });
-      if (!firstTurnRunId) await heartbeat.resumeQueuedCommentInterrupt(issue.companyId, req.body.queueId, { retryCleanup: true });
+      if (promotedQueuedRunId) {
+        await heartbeat.resumeQueuedRunsAfterDrain({ companyId: issue.companyId });
+      } else if (!firstTurnRunId) {
+        await heartbeat.resumeQueuedCommentInterrupt(issue.companyId, req.body.queueId, { retryCleanup: true });
+        await heartbeat.resumeQueuedRunsAfterDrain({ companyId: issue.companyId });
+      }
       await logActivity(db, {
         companyId: issue.companyId, actorType: actor.actorType, actorId: actor.actorId,
         agentId: actor.agentId, runId: actor.runId, agentApiKeyId: actor.agentApiKeyId,
         action: "issue.queued_comments_interrupted", entityType: "issue", entityId: issue.id,
         details: { queueId: req.body.queueId, targetRunId: req.body.targetRunId,
+          ...(promotedQueuedRunId ? { promotedQueuedRunId } : {}),
           ...(firstTurnRunId ? { deliveredWithFirstTurnOfRunId: firstTurnRunId } : {}) },
       });
       const currentIssue = await svc.getById(issue.id);
@@ -17670,7 +17699,10 @@ export function issueRoutes(
         "Issue not found",
       );
       if (!issue) return;
-      if (issue.conversationAgentId) throw conflict("Conversation messages are processed in order at turn boundaries");
+      // fork 31erGER: allow steering local Pi RPC conversation runs mid-turn.
+      if (issue.conversationAgentId && !canSteerLocalRun(req.body.targetRunId)) {
+        throw conflict("Conversation messages are processed in order at turn boundaries");
+      }
       const decision = await decideIssueAccess(req, issue, "issue:comment");
       if (!decision.allowed) throw forbidden(decision.explanation, authorizationDeniedDetails(decision));
       const actor = getActorInfo(req);
@@ -17701,6 +17733,38 @@ export function issueRoutes(
       );
     },
   );
+
+  // fork 31erGER: explicitly promote a queued run on an issue/chat to the +1 express slot.
+  router.post("/issues/:id/runs/:runId/prioritize", async (req, res) => {
+    assertBoard(req);
+    if (!req.actor.userId) throw forbidden("Board user context required");
+    const issue = await getAccessibleResource(req, res, svc.getById(req.params.id as string), "Issue not found");
+    if (!issue) return;
+    const decision = await decideIssueAccess(req, issue, "issue:comment");
+    if (!decision.allowed) throw forbidden(decision.explanation, authorizationDeniedDetails(decision));
+    const actor = getActorInfo(req);
+    const promoted = await promoteQueuedIssueRunToExpressSlot(db, {
+      companyId: issue.companyId,
+      issueId: issue.id,
+      runId: req.params.runId as string,
+    });
+    if (promoted) {
+      await heartbeat.resumeQueuedRunsAfterDrain({ companyId: issue.companyId });
+      await logActivity(db, {
+        companyId: issue.companyId,
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        agentId: actor.agentId,
+        runId: actor.runId,
+        agentApiKeyId: actor.agentApiKeyId,
+        action: "issue.run_prioritized",
+        entityType: "issue",
+        entityId: issue.id,
+        details: { runId: promoted.id, agentId: promoted.agentId },
+      });
+    }
+    res.json({ promoted: Boolean(promoted), runId: promoted?.id ?? null });
+  });
 
   router.delete(
     "/issues/:id/queued-comments/:commentId",
@@ -19357,7 +19421,42 @@ export function issueRoutes(
         });
         for (const publication of publications) publishActivity(publication);
         await issueReferencesSvc.syncComment(comment.id);
-        await deliverConversationComments(db, issue, heartbeat.wakeup);
+        // fork 31erGER: if the user sends again while this agent already has a queued run
+        // waiting behind another agent, promote it to the +1 express slot; if the agent is
+        // running a steerable local Pi RPC session and `steer: true` was requested, steer live.
+        const existingQueuedBeforeDelivery = await db
+          .select({ id: heartbeatRuns.id })
+          .from(heartbeatRuns)
+          .where(and(
+            eq(heartbeatRuns.companyId, issue.companyId),
+            eq(heartbeatRuns.agentId, issue.conversationAgentId),
+            eq(heartbeatRuns.status, "queued"),
+            sql`${heartbeatRuns.contextSnapshot}->>'issueId' = ${issue.id}`,
+          ))
+          .limit(1)
+          .then((rows) => rows[0] ?? null);
+        let conversationSteeredLive = false;
+        if (req.body.steer === true) {
+          const activeConvRun = await resolveActiveIssueRun(issue);
+          if (activeConvRun?.status === "running" && canSteerLocalRun(activeConvRun.id)) {
+            const steerOutcome = await steerLocalRun(
+              activeConvRun.id,
+              `[Live steering from board]:\n${comment.body.trim()}`,
+            );
+            conversationSteeredLive = steerOutcome.ok;
+          }
+        }
+        if (!conversationSteeredLive) {
+          await deliverConversationComments(db, issue, heartbeat.wakeup);
+          if (existingQueuedBeforeDelivery) {
+            await promoteQueuedIssueRunToExpressSlot(db, {
+              companyId: issue.companyId,
+              issueId: issue.id,
+              agentId: issue.conversationAgentId,
+            });
+            await heartbeat.resumeQueuedRunsAfterDrain({ companyId: issue.companyId });
+          }
+        }
         res.status(201).json(comment);
         return;
       }
@@ -19991,6 +20090,53 @@ export function issueRoutes(
       await externalObjectsSvc.syncCommentSafely(comment.id);
       const goalCommentSteered = await steerAutomaticGoalComment(currentIssue, actor, comment);
 
+      // fork 31erGER: allow CEO/managers (and explicit board `steer: true` requests) to
+      // steer an active local Pi RPC worker mid-turn instead of waiting until the task ends.
+      let liveLocalSteered = false;
+      if (!goalCommentSteered && currentIssue.assigneeAgentId) {
+        const activeRun = await resolveActiveIssueRun(currentIssue);
+        if (activeRun?.status === "running" && canSteerLocalRun(activeRun.id)) {
+          if (actor.actorType === "agent" && actor.agentId) {
+            const [actorAgent] = await db
+              .select({ name: agents.name })
+              .from(agents)
+              .where(and(eq(agents.companyId, currentIssue.companyId), eq(agents.id, actor.agentId)))
+              .limit(1);
+            const steerOutcome = await trySteerActiveLocalRunFromAgentComment(db, {
+              companyId: currentIssue.companyId,
+              issueIdentifier: currentIssue.identifier,
+              assigneeAgentId: currentIssue.assigneeAgentId,
+              actorAgentId: actor.agentId,
+              actorAgentName: actorAgent?.name ?? null,
+              activeRunId: activeRun.id,
+              commentBody: comment.body,
+              explicitSteer: req.body.steer === true,
+            });
+            liveLocalSteered = steerOutcome.steered;
+          } else if (actor.actorType === "user" && req.body.steer === true) {
+            const steerOutcome = await steerLocalRun(
+              activeRun.id,
+              `[Live steering from board]:\n${comment.body.trim()}`,
+            );
+            liveLocalSteered = steerOutcome.ok;
+          }
+          if (liveLocalSteered) {
+            await logActivity(db, {
+              companyId: currentIssue.companyId,
+              actorType: actor.actorType,
+              actorId: actor.actorId,
+              agentId: actor.agentId,
+              runId: actor.runId,
+              agentApiKeyId: actor.agentApiKeyId,
+              action: "issue.comment_steered_live",
+              entityType: "issue",
+              entityId: currentIssue.id,
+              details: { commentId: comment.id, targetRunId: activeRun.id },
+            });
+          }
+        }
+      }
+
       if (actor.runId) {
         await heartbeat
           .reportRunActivity(actor.runId)
@@ -20175,7 +20321,7 @@ export function issueRoutes(
           reopened,
           currentStatus: wakeIssueSnapshot.status,
         });
-        if (assigneeId && !goalCommentSteered && shouldWakeAssigneeForComment) {
+        if (assigneeId && !goalCommentSteered && !liveLocalSteered && shouldWakeAssigneeForComment) {
           if (reopened) {
             addWakeup(assigneeId, {
               source: "automation",
@@ -20201,6 +20347,7 @@ export function issueRoutes(
                 source: "issue.comment.reopen",
                 wakeReason: "issue_reopened_via_comment",
                 reopenedFrom: reopenFromStatus,
+                ...(actor.actorType === "user" ? { triggeredBy: "board" } : {}),
                 ...(resumeRequested === true
                   ? { resumeIntent: true, followUpRequested: true }
                   : {}),
@@ -20237,6 +20384,7 @@ export function issueRoutes(
                 wakeCommentId: comment.id,
                 source: "issue.comment",
                 wakeReason: "issue_commented",
+                ...(actor.actorType === "user" ? { triggeredBy: "board" } : {}),
                 ...(resumeRequested === true
                   ? { resumeIntent: true, followUpRequested: true }
                   : {}),

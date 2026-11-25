@@ -29,6 +29,26 @@ Manual local CLI mode (outside heartbeat runs): use `paperclipai agent local-cli
 
 **Run audit trail:** You MUST include `-H 'X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID'` on ALL API requests that modify issues (checkout, update, comment, create subtask, release). This links your actions to the current heartbeat run for traceability.
 
+## Company Vault (Shared Firm Knowledge & Whiteboard)
+
+Every company has a shared Obsidian-compatible **Company Vault** containing general information relevant across all agents and all projects (board preferences, company context, cross-project summaries, durable decisions, and `.canvas` spatial whiteboards).
+
+- **Host folder (local adapters):** `$PAPERCLIP_VAULT_DIR` — plain Markdown (`.md`) and standard JSON Canvas 1.0 (`.canvas`) files. You can read, search, create, and edit files directly with your file tools.
+- **REST API (all adapters):** `$PAPERCLIP_VAULT_API` (with `Authorization: Bearer $PAPERCLIP_API_KEY` and `-H 'X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID'`):
+  - `GET /api/companies/{companyId}/vault` — list the vault tree and metadata
+  - `GET /api/companies/{companyId}/vault/file?path=BOARD.md` — read a file (returns `content`, `hash`, `boardOnly`, `tags`, `backlinks`)
+  - `PUT /api/companies/{companyId}/vault/file` — create or update a file (`{ "path", "content", "expectedHash?" }`)
+  - `POST /api/companies/{companyId}/vault/folder` — create a folder (`{ "path" }`)
+  - `POST /api/companies/{companyId}/vault/rename` — rename or move a file/folder (`{ "fromPath", "toPath" }`)
+  - `DELETE /api/companies/{companyId}/vault/entry?path=...` — delete a file or folder
+  - `GET /api/companies/{companyId}/vault/search?q=...` — search filenames and contents across the vault
+
+**Autonomous usage rules:**
+1. **Read proactively:** Check `INDEX.md`, `BOARD.md`, `COMPANY.md`, `projects/`, and `decisions/` when starting cross-project work, onboarding onto an area, or before asking the board questions that may already be documented.
+2. **Write & edit autonomously:** When you learn durable cross-project facts, board preferences, architecture decisions, or reusable runbooks, record them in the Vault (or update an existing note/canvas) without waiting to be asked. Keep notes concise, prefer updating existing notes over creating duplicates, and never dump ephemeral per-task logs into the Vault.
+3. **Respect board-only locks:** Files with YAML frontmatter `editable_by: board`, `readonly_for_agents: true`, or `locked: true` are readable by you but reserved for board edits only — never modify, rename, or delete them.
+4. **NEVER use `git` in the Vault:** Do NOT run any `git` commands inside or against `$PAPERCLIP_VAULT_DIR`, and never create, edit, or delete `.git/`, `.gitignore`, or `.obsidian/`. The board exclusively controls version control for the Vault.
+
 ## Conversation tasks
 
 When the task context says **Chat mode** (the issue has `conversationAgentId`),
@@ -162,6 +182,7 @@ If `currentParticipant` does not match you, do not try to advance the stage — 
 - If the issue is actionable, start concrete work in the same heartbeat. Do not stop at a plan unless the issue specifically asks for planning.
 - Ask for information only when it prevents the next useful action. Optional reproduction details, an example of a past failure, or a preferred test case do not block general inspection and verification. Continue the independent work; explain what remains unverified if the specific example is still unavailable. Keep real access restrictions and approval gates authoritative.
 - Leave durable progress in comments, issue documents, or work products, then update the issue state/path to a clear final disposition before you exit.
+- **Live steering of active agents (managers / CEO):** When you comment (`POST /api/issues/{issueId}/comments`) on an active in-progress issue assigned to an agent you manage (or pass `"steer": true`), Paperclip injects your directive live into the running Pi agent right after its current tool call—you do not need to wait for the agent's task to finish before redirecting them.
 - Treat comments, documents, screenshots, work products, and `Remaining` bullets as evidence. They are not valid liveness paths by themselves.
 - Continue work on the current issue. Do not busy-poll agents, sessions, child issues, or processes waiting for completion.
 - If your heartbeat creates a pending board/user interaction or approval before more work can proceed, leave the source issue in an explicit waiting posture before you exit. Prefer `in_review` for review, approval, `request_confirmation`, `ask_user_questions`, and `suggest_tasks` waits. Use `blocked` with `blockedByIssueIds` when another issue is the blocker.

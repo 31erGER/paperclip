@@ -35,8 +35,10 @@ export function AgentRunQueueSetting({
         <div className="space-y-1.5">
           <h2 className="text-sm font-semibold">Agent run queue</h2>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            Limit how many agent runs execute at the same time across all companies. Further runs wait
-            in the queue and start in arrival order when a slot is free. Use 1 when all agents share one
+            Limit how many background agent runs execute at the same time across all companies.
+            Direct board messages to the CEO/coordinator and explicitly promoted (&ldquo;Send&rdquo;)
+            messages can use one reserved express slot so you can always reach the coordinator and
+            steer active agents live without waiting for long tasks. Use 1 when all agents share one
             local model server (llama.cpp, LM Studio).
           </p>
           <p className="text-xs text-muted-foreground">

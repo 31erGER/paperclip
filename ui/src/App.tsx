@@ -68,6 +68,7 @@ const loadIssueDetail = () =>
   (issueDetailLoad ??= import("./pages/IssueDetail").then((module) => ({ default: module.IssueDetail })));
 const IssueDetail = lazy(loadIssueDetail);
 const AgentChat = lazy(() => import("./pages/AgentChat").then((module) => ({ default: module.AgentChat })));
+const Vault = lazy(() => import("./pages/Vault").then((module) => ({ default: module.Vault }))); // fork 31erGER
 const IssueChatLongThreadPerf = lazy(() => import("./pages/IssueChatLongThreadPerf").then((module) => ({ default: module.IssueChatLongThreadPerf })));
 const loadInbox = () => import("./pages/Inbox").then((module) => ({ default: module.Inbox }));
 const Inbox = lazy(loadInbox);
@@ -384,6 +385,7 @@ function boardRoutes(streamlinedUiEnabled: boolean, combinedInboxTasksEnabled: b
       <Route path="goals" element={<Goals />} />
       <Route path="goals/:goalId" element={<GoalDetail />} />
       <Route path="artifacts" element={<Artifacts />} />
+      <Route path="vault" element={<Vault />} /> {/* fork 31erGER */}
       <Route path="approvals" element={<Navigate to="/approvals/pending" replace />} />
       <Route path="approvals/pending" element={<Approvals />} />
       <Route path="approvals/all" element={<Approvals />} />
@@ -840,6 +842,7 @@ export function App() {
           <Route path="status-cards" element={<UnprefixedBoardRedirect />} />
           <Route path="status-cards/:cardId" element={<UnprefixedBoardRedirect />} />
           <Route path="artifacts" element={<UnprefixedBoardRedirect />} />
+          <Route path="vault" element={<UnprefixedBoardRedirect />} /> {/* fork 31erGER */}
           <Route path="responsibilities" element={<UnprefixedBoardRedirect />} />
           <Route path="responsibilities/:responsibilityId" element={<UnprefixedBoardRedirect />} />
           <Route path="audit" element={<UnprefixedBoardRedirect />} />

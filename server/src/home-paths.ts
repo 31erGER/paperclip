@@ -9,6 +9,7 @@ import {
   resolveDefaultSecretsKeyFilePath as resolveSharedDefaultSecretsKeyFilePath,
   resolveDefaultStorageDir as resolveSharedDefaultStorageDir,
   resolveHomeAwarePath,
+  resolveCompanyVaultDir, // fork 31erGER
   resolvePaperclipConfigPathForInstance,
   resolvePaperclipHomeDir,
   resolvePaperclipInstanceId,
@@ -17,6 +18,7 @@ import {
 
 export {
   expandHomePrefix,
+  resolveCompanyVaultDir, // fork 31erGER
   resolveHomeAwarePath,
   resolvePaperclipHomeDir,
   resolvePaperclipInstanceId,

@@ -91,6 +91,11 @@ import {
   TaskChatLiveRunPill,
   toolCountSummaryFromEntries,
 } from "@/components/task-chat/TaskChatLiveRunPill";
+// fork 31erGER: single-agent chat turn redesign (log dropdown, expandable thinking, uncompressed actions).
+import {
+  SingleAgentChatModeProvider,
+  SingleAgentLiveTurn,
+} from "@/components/task-chat/SingleAgentTurnView";
 import type {
   TaskChatInteractionItem,
   TaskChatItem,
@@ -3432,6 +3437,11 @@ export function TaskChatThread(props: TaskChatThreadProps) {
                         ) : null}
                       </div>
                     ) : (
+                      // fork 31erGER: enable single-agent chat turn presentation in conversationMode.
+                      <SingleAgentChatModeProvider
+                        enabled={Boolean(conversationMode)}
+                        rawEntriesByRunId={transcriptByRun}
+                      >
                       <TaskChatThreadView
                         items={threadItems}
                         scrollingHistory={scrollingHistory}
@@ -3526,21 +3536,43 @@ export function TaskChatThread(props: TaskChatThreadProps) {
                                   ) : (
                                     <TaskChatShimmerScope items={tailItems}>
                                       <McpAppTurnViews runId={tailRunId} refreshKey={mcpAppRunRefreshKey(tailItems, tailStatus)} />
-                                      <TaskChatLiveTail
-                                        items={tailItems}
-                                        emptyMessage={
-                                          tailStatus === "queued"
-                                            ? undefined
-                                            : (liveRun && liveRun.id === tailRunId
-                                                ? liveRun.currentStatusMessage
-                                                : null) ||
-                                              (tailStatus === "failed"
-                                                ? linkedRunMetaById.get(tailRunId ?? "")?.errorCode?.startsWith("workspace_git_scan_")
-                                                  ? "Workspace setup failed before the agent started."
-                                                  : "This run stopped before a response was available. Review the task’s connection or recovery action below."
-                                                : "Waiting for transcript...")
-                                        }
-                                      />
+                                      {conversationMode ? (
+                                        // fork 31erGER: single-agent live turn with log dropdown, expandable thinking, and uncompressed actions.
+                                        <SingleAgentLiveTurn
+                                          runId={tailRunId}
+                                          items={tailItems}
+                                          rawEntries={tailEntries}
+                                          onRuntimeRequestDecision={handleRuntimeRequestDecision}
+                                          emptyMessage={
+                                            tailStatus === "queued"
+                                              ? undefined
+                                              : (liveRun && liveRun.id === tailRunId
+                                                  ? liveRun.currentStatusMessage
+                                                  : null) ||
+                                                (tailStatus === "failed"
+                                                  ? linkedRunMetaById.get(tailRunId ?? "")?.errorCode?.startsWith("workspace_git_scan_")
+                                                    ? "Workspace setup failed before the agent started."
+                                                    : "This run stopped before a response was available. Review the task’s connection or recovery action below."
+                                                  : "Waiting for transcript...")
+                                          }
+                                        />
+                                      ) : (
+                                        <TaskChatLiveTail
+                                          items={tailItems}
+                                          emptyMessage={
+                                            tailStatus === "queued"
+                                              ? undefined
+                                              : (liveRun && liveRun.id === tailRunId
+                                                  ? liveRun.currentStatusMessage
+                                                  : null) ||
+                                                (tailStatus === "failed"
+                                                  ? linkedRunMetaById.get(tailRunId ?? "")?.errorCode?.startsWith("workspace_git_scan_")
+                                                    ? "Workspace setup failed before the agent started."
+                                                    : "This run stopped before a response was available. Review the task’s connection or recovery action below."
+                                                  : "Waiting for transcript...")
+                                          }
+                                        />
+                                      )}
                                     </TaskChatShimmerScope>
                                   )}
                                   </TaskChatShimmerScope>
@@ -3560,6 +3592,7 @@ export function TaskChatThread(props: TaskChatThreadProps) {
                         contentKey={`${autoFollowContentKey}:${historyRevealed}`}
                         className={isMobile ? undefined : "pt-3"}
                       />
+                      </SingleAgentChatModeProvider>
                     )}
                   </>
                 ) : null}

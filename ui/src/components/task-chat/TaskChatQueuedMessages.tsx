@@ -212,8 +212,13 @@ function SortableQueuedMessage({
             Cancel
           </button>
         </span>
-      ) : (queue.targetRunId || queue.state === "deferred") && (!queue.targetRunId || queue.protocol === "legacy" || entry.source?.requiresFreshSession ||
-        (queue.steeringDisposition !== "available" && onInterrupt) ? (
+      ) : (queue.targetRunId || queue.state === "deferred" || (queue.state === "queued" && Boolean(onInterrupt))) && (
+        // fork 31erGER: allow clicking "Send" on `state === "queued"` messages to
+        // promote the queued run into the +1 express slot.
+        !queue.targetRunId ||
+        queue.protocol === "legacy" ||
+        entry.source?.requiresFreshSession ||
+        (queue.steeringDisposition !== "available" && Boolean(onInterrupt)) ? (
         <button
           type="button"
           onClick={onInterrupt}

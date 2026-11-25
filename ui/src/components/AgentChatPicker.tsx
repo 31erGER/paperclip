@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Agent } from "@paperclipai/shared";
 import { AgentAvatar } from "@/components/AgentAvatar";
+import { AgentAvatarWithStatus, AgentStatusText, resolveEffectiveAgentStatus } from "@/components/AgentStatusIndicator"; // fork 31erGER
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -93,6 +94,7 @@ function AgentChatPickerResults({ agents, onSelect, onComplete, loading, error, 
           <CommandGroup>
             {agents.map((agent) => {
               const unreadCount = unreadMessageCounts?.get(agent.id) ?? 0;
+              const effectiveStatus = resolveEffectiveAgentStatus(agent.status); // fork 31erGER
               return (
                 <CommandItem
                   key={agent.id}
@@ -102,16 +104,16 @@ function AgentChatPickerResults({ agents, onSelect, onComplete, loading, error, 
                   disabled={openingId !== null}
                   className="gap-3 px-3 py-3"
                 >
-                  {renderAgentIcon ? renderAgentIcon(agent) : <AgentAvatar agent={agent} size={32} />}
+                  <AgentAvatarWithStatus agent={agent} size={32} status={effectiveStatus}>
+                    {renderAgentIcon ? renderAgentIcon(agent) : <AgentAvatar agent={agent} size={32} />}
+                  </AgentAvatarWithStatus>
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                     <span className="truncate font-medium">{agent.name}</span>
                     <span className="truncate text-xs text-muted-foreground">{agent.title ?? agent.role}</span>
                   </span>
                   {unreadCount > 0 && <Badge variant="ghost" aria-label={`${unreadCount} unread ${unreadCount === 1 ? "message" : "messages"} from ${agent.name}`} className="shrink-0 bg-primary font-mono tabular-nums text-primary-foreground">{unreadCount}</Badge>}
                   {existingChatAgentIds && <span className="shrink-0 text-xs text-muted-foreground">{existingIds.has(agent.id) ? "Open chat" : "New chat"}</span>}
-                  {agent.status === "paused" && <span className="text-xs text-(--status-agent-paused)">Paused</span>}
-                  {agent.status === "terminated" && <span className="text-xs text-muted-foreground">Terminated</span>}
-                  {agent.status === "pending_approval" && <span className="text-xs text-muted-foreground">Awaiting approval</span>}
+                  <AgentStatusText status={effectiveStatus} className="shrink-0 text-xs" />
                 </CommandItem>
               );
             })}

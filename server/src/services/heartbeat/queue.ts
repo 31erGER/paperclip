@@ -194,7 +194,7 @@ import { readContinuationAttempt } from "../recovery/index.js";
 import { allowsDependencyBlockedWake, extractWakeCommentIds, wakeChatConversationsConflict } from "../../modules/run-dispatch/index.js";
 import { dispatchForAgent, outsideAgentDispatch } from "../agent-start-lock.js";
 import { AgentRunSlotsFull, assertAgentRunSlotFree } from "./run-slot-admission.js";
-import { readInstanceRunLimit } from "./instance-run-slots.js";
+import { readInstanceRunLimit, runQueuePriorityTier } from "./instance-run-slots.js";
 import {
   evaluateAgentInvokability,
   shouldCancelRunsForNonInvokableAgent,
@@ -2370,9 +2370,18 @@ export function createHeartbeatQueue(db: Db, dependencies: HeartbeatQueueDepende
     if (isRunAdmissionClosed() || (await getSchedulingSuppression()).suppressed) return;
     const cutoff = await getWorktreeExecutionCutoff();
     const queuedRuns = await db
-      .select({ agentId: heartbeatRuns.agentId })
+      .select({
+        agentId: heartbeatRuns.agentId,
+        createdAt: heartbeatRuns.createdAt,
+        invocationSource: heartbeatRuns.invocationSource,
+        triggerDetail: heartbeatRuns.triggerDetail,
+        contextSnapshot: heartbeatRuns.contextSnapshot,
+        agentRole: agents.role,
+        agentReportsTo: agents.reportsTo,
+      })
       .from(heartbeatRuns)
       .innerJoin(companies, eq(companies.id, heartbeatRuns.companyId))
+      .innerJoin(agents, eq(agents.id, heartbeatRuns.agentId))
       .where(
         and(
           eq(heartbeatRuns.status, "queued"),
@@ -2381,11 +2390,32 @@ export function createHeartbeatQueue(db: Db, dependencies: HeartbeatQueueDepende
           cutoff ? gte(heartbeatRuns.createdAt, cutoff) : undefined,
         ),
       )
-      // Fork 31erGER: oldest queued run first, so a freed instance-wide slot
-      // goes to the work that has waited longest across agents.
       .orderBy(asc(heartbeatRuns.createdAt));
 
-    const agentIds = [...new Set(queuedRuns.map((r) => r.agentId))];
+    // Fork 31erGER: prioritize promoted messages (Tier 0), board messages to CEO/coordinator
+    // (Tier 1), and other board user messages (Tier 2) ahead of background tasks (Tier 3)
+    // so human messages never wait behind a backlog of automated agent tasks.
+    const rankedRuns = [...queuedRuns].sort((a, b) => {
+      const tierDiff =
+        runQueuePriorityTier({
+          invocationSource: a.invocationSource,
+          triggerDetail: a.triggerDetail,
+          contextSnapshot: (a.contextSnapshot as Record<string, unknown> | null) ?? null,
+          agentRole: a.agentRole,
+          agentReportsTo: a.agentReportsTo,
+        }) -
+        runQueuePriorityTier({
+          invocationSource: b.invocationSource,
+          triggerDetail: b.triggerDetail,
+          contextSnapshot: (b.contextSnapshot as Record<string, unknown> | null) ?? null,
+          agentRole: b.agentRole,
+          agentReportsTo: b.agentReportsTo,
+        });
+      if (tierDiff !== 0) return tierDiff;
+      return a.createdAt.getTime() - b.createdAt.getTime();
+    });
+
+    const agentIds = [...new Set(rankedRuns.map((r) => r.agentId))];
     for (const agentId of agentIds) {
       await startNextQueuedRunForAgent(agentId, true, true);
     }
@@ -2557,14 +2587,16 @@ export function createHeartbeatQueue(db: Db, dependencies: HeartbeatQueueDepende
 
   /**
    * Called when a run frees its slot. Upstream promotes only the same agent's
-   * queue. With an instance-wide run limit (fork 31erGER) the freed slot may
-   * belong to another agent's queued run, so a sweep over all queued runs in
-   * arrival order follows.
+   * queue. With an instance-wide run limit (fork 31erGER), run the priority-sorted
+   * cross-agent sweep FIRST so waiting CEO/board/promoted messages always claim the
+   * freed slot ahead of background worker tasks.
    */
   async function startNextQueuedRunsAfterRunSettled(agentId: string) {
-    const started = await startNextQueuedRunForAgent(agentId);
-    if ((await readInstanceRunLimit(db)) !== null) await resumeQueuedRunsAfterDrain();
-    return started;
+    if ((await readInstanceRunLimit(db)) !== null) {
+      await resumeQueuedRunsAfterDrain();
+      return [];
+    }
+    return startNextQueuedRunForAgent(agentId);
   }
 
   function requestQueuedDispatch(agentId: string, request: QueuedDispatchRequest) {

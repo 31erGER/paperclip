@@ -5,6 +5,7 @@ import { constants as fsConstants, promises as fs, type Dirent } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { CONNECTION_INTENT_AGENT_GUIDANCE } from "@paperclipai/shared";
+import { resolveCompanyVaultDir } from "@paperclipai/shared/home-paths"; // fork 31erGER
 import { sanitizeRemoteExecutionEnv } from "./remote-execution-env.js";
 import { applyChildRuntimePrivacyEnv } from "./diagnostic-env.js";
 import {
@@ -3347,7 +3348,34 @@ export function buildPaperclipEnv(agent: {
     process.env.PAPERCLIP_RUNTIME_API_URL ??
     `http://${runtimeHost}:${runtimePort}`;
   vars.PAPERCLIP_API_URL = apiUrl;
+  // fork 31erGER: expose the company's Obsidian-compatible shared Vault folder and API.
+  vars.PAPERCLIP_VAULT_API = `${apiUrl.replace(/\/+$/, "")}/api/companies/${encodeURIComponent(agent.companyId)}/vault`;
+  try {
+    vars.PAPERCLIP_VAULT_DIR = resolveCompanyVaultDir(agent.companyId);
+  } catch {
+    // non-standard companyId in synthetic tests; skip local vault path
+  }
   return vars;
+}
+
+// fork 31erGER: concise autonomous Company Vault directive for agent runtimes.
+export function buildCompanyVaultGuidance(
+  vaultDir?: string | null,
+  vaultApi?: string | null,
+): string {
+  const locationLines = [
+    vaultDir ? `- Local Obsidian-compatible folder: \`${vaultDir}\` (env: \`$PAPERCLIP_VAULT_DIR\`)` : null,
+    vaultApi ? `- Company Vault REST API: \`${vaultApi}\` (env: \`$PAPERCLIP_VAULT_API\`)` : null,
+  ].filter(Boolean);
+  return [
+    "## Company Vault (Shared Firm Knowledge & Whiteboard)",
+    "This company maintains a shared Obsidian-compatible Vault (`.md` notes and `.canvas` JSON Canvas whiteboards) across all agents and projects.",
+    ...locationLines,
+    "- Use it autonomously: read `INDEX.md`, `BOARD.md`, `COMPANY.md`, `projects/`, and `decisions/` before cross-project work or before asking the board questions that may already be answered.",
+    "- Write and edit durable firm-wide knowledge (board preferences, project summaries, architecture decisions, reusable runbooks, or `.canvas` boards) as you learn it. Update existing notes instead of creating duplicates; keep ephemeral task scratchpad out of the vault.",
+    "- Respect board-only locks: never modify files whose YAML frontmatter has `editable_by: board`, `readonly_for_agents: true`, or `locked: true`.",
+    "- NEVER run `git` commands inside or against the Vault directory (`$PAPERCLIP_VAULT_DIR`), and never modify `.git/`, `.gitignore`, or `.obsidian/`. The board exclusively manages version control for the Vault.",
+  ].join("\n");
 }
 
 export function applyPaperclipWorkspaceEnv(
@@ -4821,6 +4849,8 @@ export async function runChildProcess(
     }) => Promise<void>;
     terminalResultCleanup?: TerminalResultCleanupOptions;
     stdin?: string;
+    /** fork 31erGER: keep stdin open for interactive local RPC adapters (e.g. pi --mode rpc). */
+    onStdinReady?: (stdin: NodeJS.WritableStream) => void;
     remoteExecution?: RemoteExecutionSpec | null;
     localProcessSandbox?: LocalProcessSandboxOptions | null;
   },
@@ -4885,7 +4915,7 @@ export async function runChildProcess(
           env: childEnv,
           detached: process.platform !== "win32",
           shell: false,
-          stdio: [processStdin != null ? "pipe" : "ignore", "pipe", "pipe"],
+          stdio: [processStdin != null || opts.onStdinReady ? "pipe" : "ignore", "pipe", "pipe"],
         }) as ChildProcessWithEvents;
         const startedAt = new Date().toISOString();
         const processGroupId = resolveProcessGroupId(child);
@@ -5039,7 +5069,7 @@ export async function runChildProcess(
         });
 
         const stdin = child.stdin;
-        if (processStdin != null && stdin) {
+        if ((processStdin != null || opts.onStdinReady) && stdin) {
           let stdinFailureHandled = false;
           const handleStdinFailure = (err: unknown) => {
             if (!err || stdinFailureHandled) return;
@@ -5059,8 +5089,15 @@ export async function runChildProcess(
             )
               return;
             try {
-              stdin.write(processStdin, handleStdinFailure);
-              stdin.end();
+              if (processStdin != null) {
+                stdin.write(processStdin, handleStdinFailure);
+              }
+              if (opts.onStdinReady) {
+                // fork 31erGER: caller owns the open stdin stream lifecycle.
+                opts.onStdinReady(stdin);
+              } else {
+                stdin.end();
+              }
             } catch (err) {
               handleStdinFailure(err);
             }

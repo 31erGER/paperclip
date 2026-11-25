@@ -56,14 +56,26 @@ folder is required and must already exist. Agents assigned to the project's
 tasks run with that folder as their working directory, directly in place (no
 copy, no worktree). The folder does not need to be a git repository.
 
-## Agent run queue
+## Agent run queue & live steering
 
-Settings → General → **Agent run queue** limits how many agent runs execute at
-the same time across all companies. Other runs stay queued and start in
-arrival order when a run finishes. Choose **1 at a time** when all agents use
-one llama.cpp or LM Studio server: parallel requests to one local server often
-produce broken output. The per-agent "max concurrent runs" setting still
-applies as well.
+Settings → General → **Agent run queue** limits how many background agent runs
+execute at the same time across all companies. Choose **1 at a time** when all
+agents use one llama.cpp or LM Studio server so automated background tasks run
+sequentially without flooding the local server.
+
+- **Priority ordering**: When a slot frees up, promoted messages (Tier 0), board
+  messages to the CEO/coordinator (Tier 1), and other board user messages
+  (Tier 2) are always dispatched ahead of automated background tasks (Tier 3).
+- **Reserved +1 express slot**: Direct board messages to the CEO/coordinator
+  and explicitly promoted messages (clicking **Send** on a queued
+  message bar or sending again on a queued chat) can use one reserved parallel
+  express slot (`limit + 1`) so you never wait hours for a background worker to
+  finish before talking to the coordinator.
+- **Live Pi RPC steering (`pi --mode rpc`)**: Local Pi runs stay open over JSON
+  RPC stdin (`PAPERCLIP_PI_RPC_STEERING=0` to disable). Board users can click
+  **Steer** on queued messages to redirect an active Pi run right after its
+  current tool call, and CEO/manager comments on an active subordinate's task
+  steer that worker mid-turn automatically.
 
 ## Local models with Pi
 
@@ -85,6 +97,48 @@ operator's own Pi setup from `~/.pi/agent` (extensions, packages,
 `settings.json`, themes, prompts, tools). Never linked: `models.json`,
 `auth.json`, `sessions`, `skills` and the global instruction files.
 `PAPERCLIP_PI_HOST_CONFIG=0` turns it off.
+
+## Company Vault (Obsidian-compatible knowledge & whiteboard)
+
+Each company gets a shared **Vault** folder under `<paperclip-repo>/vaults/<companyId>`
+(overrideable via
+`PAPERCLIP_VAULT_ROOT`, ignored by Paperclip's `.gitignore` so you can manage your own
+`git` repo per vault) containing plain Markdown (`.md`) notes and Obsidian JSON Canvas 1.0
+(`.canvas`) whiteboards.
+
+- **Open in Obsidian**: copy the folder path from the bottom of the Vault
+  sidebar and open it directly as an Obsidian vault; edits stay in sync with
+  Paperclip's UI (with conflict detection).
+- **UI**: sidebar → **Vault** (`/vault`) provides a file browser, full-text
+  search, split Markdown editor with `[[wikilinks]]` and backlinks, and an
+  interactive pan/zoom `.canvas` whiteboard.
+- **Autonomous agents**: every agent receives `PAPERCLIP_VAULT_DIR` and
+  `PAPERCLIP_VAULT_API` plus built-in guidance to read and update durable
+  cross-project knowledge autonomously.
+- **Board-only protection & Git safety**: files with `editable_by: board`
+  frontmatter (toggleable in the Vault UI; enabled by default on `BOARD.md`)
+  are readable by agents but rejected (`403`) on agent writes. Agents are
+  forbidden from running `git` inside the Vault or modifying `.git/`,
+  `.gitignore`, or `.obsidian/`, leaving version control exclusively to the
+  board.
+
+## Single-agent chat turn view
+
+Direct 1-on-1 agent chats (`/chats/:agentRef`) use a dedicated turn presentation:
+
+- **Run context & log dropdown**: Paperclip wake payloads, resume deltas, and
+  Pi lifecycle logs are tucked into a collapsed-by-default **Run context & log**
+  dropdown instead of filling the chat screen while the agent thinks.
+- **Expandable thinking blocks**: Reasoning renders as a framed, collapsible
+  card (Hermes / Pi TUI style) with a multi-line live preview while streaming
+  and a scrollable full reasoning drawer when expanded.
+- **Uncompressed action list**: Tool calls render chronologically as individual
+  rows with readable targets, status/exit badges, durations, diff counts, and
+  click-to-expand output/diff drawers.
+- **Claude Code / Pi TUI-style file edit cards**: File `edit` and `write` calls
+  display the file path, `+N −M` diff badge, and a short inline tinted diff
+  abstract directly in the stream; clicking the card or abstract unfolds the
+  full scrollable diff.
 
 ## Remote access
 

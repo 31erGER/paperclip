@@ -107,3 +107,21 @@ test-results/
 # Content-addressed CI task results
 .turbo/
 scripts/scale-ramp/results/
+
+# Company Obsidian vaults & local private data (fork 31erGER)
+/vaults/
+vaults/
+.pi/
+.env.*
+!.env.example
+!.env.runner-e2e.example
+!docker/.env.aws.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.sqlite
+*.sqlite3
+*.db
+auth.json
+models.json

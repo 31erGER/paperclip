@@ -97,6 +97,18 @@ function createCompactCompactor(now: Clock): PiStdoutCompactor {
     if (event.type === "tool_execution_update") {
       return progressTick(allowToolTick, event.toolCallId);
     }
+    // fork 31erGER: drop high-frequency RPC UI widget/response/journal events so
+    // host Pi extensions (e.g. per-second setWidget timers) cannot flood the run log
+    // and evict real tool calls and commands from the UI tail buffer.
+    if (
+      event.type === "extension_ui_request" ||
+      event.type === "extension_ui_response" ||
+      event.type === "extension_error" ||
+      event.type === "response" ||
+      event.type === "entry_appended"
+    ) {
+      return null;
+    }
     // Non-`message_update` events pass through untouched — including
     // `tool_execution_end`, whose `.result` can be tens of MiB (large
     // tool/bash output). Capping that is an intentional separate follow-up:

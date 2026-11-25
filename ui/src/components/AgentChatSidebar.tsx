@@ -1,6 +1,7 @@
 import { Star, SquarePen } from "lucide-react";
 import { SidebarNavItem } from "@/components/SidebarNavItem";
 import { AgentIcon } from "@/components/AgentIconPicker";
+import { AgentStatusDot, resolveEffectiveAgentStatus } from "@/components/AgentStatusIndicator"; // fork 31erGER
 import { Button } from "@/components/ui/button";
 import type { Agent } from "@paperclipai/shared";
 import { agentRouteRef, cn } from "@/lib/utils";
@@ -34,6 +35,9 @@ export function AgentChatSidebar({
           active={activeId === agent.id}
           iconNode={
             <AgentIcon icon={agent.icon} className="h-4 w-4 shrink-0" />
+          }
+          trailing={
+            <AgentStatusDot status={resolveEffectiveAgentStatus(agent.status)} size="xs" />
           }
           className="pr-9"
         />

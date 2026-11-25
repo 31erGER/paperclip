@@ -64,3 +64,12 @@ export {
   resetPiModelsCacheForTests,
 } from "./models.js";
 export { parsePiJsonl, isPiUnknownSessionError } from "./parse.js";
+// fork 31erGER: live RPC steering registry for local Pi runs.
+export {
+  canSteerPiRun,
+  createPiRpcSession,
+  steerPiRun,
+  abortPiRun,
+  piRpcSteeringEnabled,
+  type PiSteerResult,
+} from "./live-steering.js";

@@ -5,6 +5,7 @@ import { Badge } from "./ui/badge";
 import type { Agent } from "@paperclipai/shared";
 import { AgentChatPicker } from "@/components/AgentChatPicker";
 import { AgentAvatar } from "@/components/AgentAvatar";
+import { AgentAvatarWithStatus, AgentStatusText, agentStatusLabel, resolveEffectiveAgentStatus } from "@/components/AgentStatusIndicator"; // fork 31erGER
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Link, useNavigate } from "@/lib/router";
@@ -104,15 +105,20 @@ export function AgentConversationSidebar({ agents, compact = false, existingChat
           const unreadCount = unreadMessageCounts?.get(agent.id) ?? 0;
           const hasUnread = unreadCount > 0 || unreadIds.has(agent.id);
           const canReorder = pinnedIds.has(agent.id) && !!onReorderPins;
+          const effectiveStatus = resolveEffectiveAgentStatus(agent.status, Boolean(previews[agent.id])); // fork 31erGER
+          const subtitleRole = agent.status === "terminated" ? null : (agent.title ?? agent.role);
           const content = <><Link to={`/chats/${encodeURIComponent(agent.status === "terminated" ? agent.id : agentRouteRef(agent))}`}
           aria-current={activeId === agent.id ? "page" : undefined}
-          title={`${agent.name}${agent.title ? ` · ${agent.title}` : ""}`}
+          title={`${agent.name} (${agentStatusLabel(effectiveStatus)})${agent.title ? ` · ${agent.title}` : ""}`}
           onClick={event => { if (onSelect) { event.preventDefault(); onSelect(agent); } }}
           className={cn("agent-contact-row flex min-w-0 items-center gap-3 rounded-md px-2.5 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring", renderAgentAction && hasUnread && "pr-12", canReorder && "pr-20", activeId === agent.id ? "bg-accent text-accent-foreground" : "group-hover/agent-pin:bg-accent/60 group-focus-within/agent-pin:bg-accent/60")}>
-          <AgentAvatar agent={agent} size={40} />
+          <AgentAvatarWithStatus agent={agent} size={40} status={effectiveStatus} />
           <span className="agent-pin-text flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="truncate text-sm font-medium">{agent.name}</span>
-            <span className="truncate text-xs text-muted-foreground">{agent.status === "terminated" ? "Terminated" : agent.title ?? agent.role}</span>
+            <span className="truncate text-xs text-muted-foreground">
+              <AgentStatusText status={effectiveStatus} />
+              {subtitleRole ? ` · ${subtitleRole}` : null}
+            </span>
           </span>
           {unreadCount > 0 ? <Badge variant="ghost" aria-label={`${unreadCount} unread ${unreadCount === 1 ? "message" : "messages"} from ${agent.name}`} className="shrink-0 bg-primary font-mono tabular-nums text-primary-foreground">{unreadCount}</Badge>
             : unreadIds.has(agent.id) && <span role="img" aria-label={`Unread messages from ${agent.name}`} className="size-2 shrink-0 rounded-full bg-primary" />}

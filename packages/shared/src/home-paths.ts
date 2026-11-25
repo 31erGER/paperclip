@@ -1,5 +1,6 @@
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url"; // fork 31erGER
 
 export const DEFAULT_PAPERCLIP_INSTANCE_ID = "default";
 export const PAPERCLIP_CONFIG_BASENAME = "config.json";
@@ -89,4 +90,39 @@ export function resolveDefaultBackupDir(input: {
 
 export function resolveHomeAwarePath(value: string): string {
   return path.resolve(expandHomePrefix(value));
+}
+
+// fork 31erGER: company-scoped Obsidian-compatible Vault folder.
+// Defaults to <paperclip-repo>/vaults/<companyId> (override via PAPERCLIP_VAULT_ROOT).
+const REPO_VAULTS_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  "..",
+  "vaults",
+);
+
+export function resolveCompanyVaultDir(
+  companyId: string,
+  input: { homeDir?: string; instanceId?: string } = {},
+): string {
+  const trimmed = companyId.trim();
+  if (!trimmed || !PATH_SEGMENT_RE.test(trimmed)) {
+    throw new Error(`Invalid company id for vault path '${companyId}'.`);
+  }
+  const explicitRoot = process.env.PAPERCLIP_VAULT_ROOT?.trim();
+  if (explicitRoot) {
+    return path.resolve(expandHomePrefix(explicitRoot), trimmed);
+  }
+  const instanceId = resolvePaperclipInstanceId(input.instanceId);
+  if (input.homeDir) {
+    if (instanceId === DEFAULT_PAPERCLIP_INSTANCE_ID) {
+      return path.resolve(resolvePaperclipHomeDir(input.homeDir), "vaults", trimmed);
+    }
+    return path.resolve(resolvePaperclipInstanceRoot(input), "vaults", trimmed);
+  }
+  if (instanceId === DEFAULT_PAPERCLIP_INSTANCE_ID) {
+    return path.resolve(REPO_VAULTS_ROOT, trimmed);
+  }
+  return path.resolve(resolvePaperclipInstanceRoot(input), "vaults", trimmed);
 }

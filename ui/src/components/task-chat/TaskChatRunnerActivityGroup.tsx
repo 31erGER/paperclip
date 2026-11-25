@@ -36,6 +36,8 @@ import { useTaskChatShimmer } from "./TaskChatShimmer";
 import { TaskChatDiffCounts, TaskChatDiffView } from "./TaskChatDiffView";
 import { useTaskReferenceLabel, withTaskReference } from "./task-reference";
 import { ANALYTICS_MASK_CLASS } from "@/lib/analytics/privacy";
+// fork 31erGER: uncompressed single-agent chat presentation for activity phases.
+import { SingleAgentActivityPhaseView, useSingleAgentChatMode } from "./SingleAgentTurnView";
 
 type Activity = TaskChatActivityPhaseItem["items"][number];
 type ToolActivity = Extract<Activity, { kind: "tool" }>;
@@ -585,6 +587,21 @@ function ReadRunActivity({ items }: { items: ToolActivity[] }) {
 
 /** One rolling activity between commentary messages, with persistent optional history. */
 export function TaskChatRunnerActivityGroup({
+  item,
+  defaultExpanded = false,
+}: {
+  item: TaskChatActivityPhaseItem;
+  defaultExpanded?: boolean;
+}) {
+  // fork 31erGER: single-agent chat renders thinking and tool actions uncompressed.
+  const singleAgentChat = useSingleAgentChatMode();
+  if (singleAgentChat) {
+    return <SingleAgentActivityPhaseView item={item} />;
+  }
+  return <TaskChatRunnerActivityGroupStandard item={item} defaultExpanded={defaultExpanded} />;
+}
+
+function TaskChatRunnerActivityGroupStandard({
   item,
   defaultExpanded = false,
 }: {

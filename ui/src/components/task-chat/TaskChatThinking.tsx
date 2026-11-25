@@ -6,9 +6,34 @@ import { flattenSelfTalk } from "./transcript-adapter";
 import { TaskChatReasoningSummary } from "./TaskChatReasoningSummary";
 import { latestReasoningHeadline } from "./reasoning-summary";
 import { useTaskChatShimmer } from "./TaskChatShimmer";
+// fork 31erGER: Hermes/Pi-TUI-style expandable thinking block for single-agent chat.
+import { SingleAgentThinkingBlock, useSingleAgentChatMode } from "./SingleAgentTurnView";
 
 /** Provider-authored reasoning summaries and deltas; never reconstructed hidden reasoning. */
-export function TaskChatThinking({
+export function TaskChatThinking(props: {
+  item: TaskChatThinkingItem;
+  /** Activity timelines keep reasoning as one compact row until requested. */
+  defaultOpen?: boolean;
+  /** Optional alignment override for a containing activity rail. */
+  rowClassName?: string;
+  /** Whether this reasoning block is the runner's current activity. */
+  active?: boolean;
+}) {
+  // fork 31erGER: single-agent chat uses the expandable card thinking block.
+  const singleAgentChat = useSingleAgentChatMode();
+  if (singleAgentChat) {
+    return (
+      <SingleAgentThinkingBlock
+        item={props.item}
+        active={props.active ?? Boolean(props.item.streaming)}
+        defaultOpen={props.defaultOpen ?? false}
+      />
+    );
+  }
+  return <TaskChatThinkingStandard {...props} />;
+}
+
+function TaskChatThinkingStandard({
   item,
   defaultOpen,
   rowClassName,
