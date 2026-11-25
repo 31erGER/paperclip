@@ -15,6 +15,7 @@ import { useDialogActions } from "../context/DialogContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useSidebar } from "../context/SidebarContext";
 import { queryKeys } from "../lib/queryKeys";
+import { isWaitingToStart } from "../lib/agent-queue-wait"; // fork 31erGER
 import { isPlatformManagedEnvironment } from "../lib/managed-sandbox-environment";
 import { AgentStatusBadge, AgentStatusCapsule } from "../components/StatusBadge";
 import { EntityRow } from "../components/EntityRow";
@@ -256,17 +257,17 @@ export function Agents() {
   });
   usePublishSharedQueryData(sharedRuns, runs, runsUpdatedAt);
 
-  // Map agentId -> first live run + live run count
+  // Map agentId -> first actually-running live run + running count (fork 31erGER: exclude queued)
   const liveRunByAgent = useMemo(() => {
-    const map = new Map<string, { runId: string; liveCount: number }>();
+    const map = new Map<string, { runId: string; issueId: string | null; liveCount: number }>();
     for (const r of runs ?? []) {
-      if (r.status !== "running" && r.status !== "queued") continue;
+      if (r.status !== "running" || isWaitingToStart(r)) continue;
       const existing = map.get(r.agentId);
       if (existing) {
         existing.liveCount += 1;
         continue;
       }
-      map.set(r.agentId, { runId: r.id, liveCount: 1 });
+      map.set(r.agentId, { runId: r.id, issueId: r.issueId ?? null, liveCount: 1 });
     }
     return map;
   }, [runs]);
@@ -410,6 +411,7 @@ export function Agents() {
         <LiveRunIndicator
           agentRef={agentRouteRef(agent)}
           runId={liveRunByAgent.get(agent.id)!.runId}
+          issueId={liveRunByAgent.get(agent.id)!.issueId}
           liveCount={liveRunByAgent.get(agent.id)!.liveCount}
         />
       )}
@@ -538,7 +540,7 @@ function OrgTreeNode({
   node: OrgNode;
   depth: number;
   agentMap: Map<string, Agent>;
-  liveRunByAgent: Map<string, { runId: string; liveCount: number }>;
+  liveRunByAgent: Map<string, { runId: string; issueId: string | null; liveCount: number }>;
   environmentByAgentId: Map<string, EnvironmentDescriptor>;
   environmentDataLoading: boolean;
   showEnvironment: boolean;
@@ -596,6 +598,7 @@ function OrgTreeNode({
               <LiveRunIndicator
                 agentRef={agent ? agentRouteRef(agent) : node.id}
                 runId={liveRunByAgent.get(node.id)!.runId}
+                issueId={liveRunByAgent.get(node.id)!.issueId}
                 liveCount={liveRunByAgent.get(node.id)!.liveCount}
               />
             ) : (
@@ -607,6 +610,7 @@ function OrgTreeNode({
               <LiveRunIndicator
                 agentRef={agent ? agentRouteRef(agent) : node.id}
                 runId={liveRunByAgent.get(node.id)!.runId}
+                issueId={liveRunByAgent.get(node.id)!.issueId}
                 liveCount={liveRunByAgent.get(node.id)!.liveCount}
               />
             )}
@@ -702,15 +706,18 @@ function AgentMetaColumns({
 function LiveRunIndicator({
   agentRef,
   runId,
+  issueId,
   liveCount,
 }: {
   agentRef: string;
   runId: string;
+  issueId?: string | null;
   liveCount: number;
 }) {
+  const href = issueId ? `/issues/${encodeURIComponent(issueId)}` : `/agents/${agentRef}/runs/${runId}`; // fork 31erGER
   return (
     <Link
-      to={`/agents/${agentRef}/runs/${runId}`}
+      to={href}
       className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-500/10 hover:bg-blue-500/20 transition-colors no-underline"
       onClick={(e) => e.stopPropagation()}
     >

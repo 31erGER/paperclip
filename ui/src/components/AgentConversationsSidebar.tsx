@@ -11,6 +11,12 @@ import { queryKeys } from "@/lib/queryKeys";
 import { resourceMembershipState, useResourceMemberships } from "@/hooks/useResourceMemberships";
 import { useDialogActions } from "@/context/DialogContext";
 import { AgentChatPin, agentChatPinKey, useAgentChatPins } from "./AgentChatPin";
+import {
+  buildChatIssueIdByAgentMap,
+  resolveAgentActiveRunSummary,
+  useCompanyLiveRuns,
+  type AgentActiveRunSummary,
+} from "./AgentActiveRunJump"; // fork 31erGER
 
 /** Account- and company-scoped data for the secondary chat navigation. */
 export function AgentConversationsSidebar({ compact = false }: { compact?: boolean } = {}) {
@@ -64,10 +70,24 @@ export function AgentConversationsSidebar({ compact = false }: { compact?: boole
     const prefix = `agent-chat:${companyId}:`;
     return agentChatPins.orderedKeys.filter(key => key.startsWith(prefix)).map(key => key.slice(prefix.length));
   }, [companyId, agentChatPins.orderedKeys]);
-  return <AgentConversationSidebar key={`${companyId}:${userId}`} agents={[...conversations, ...teammates]} availableAgents={roster}
+  // fork 31erGER: derive honest per-agent live run state (running vs queued + chat vs task)
+  const liveRunsQuery = useCompanyLiveRuns(companyId);
+  const listedAgents = useMemo(() => [...conversations, ...teammates], [conversations, teammates]);
+  const activeRunsByAgent = useMemo(() => {
+    const map = new Map<string, AgentActiveRunSummary>();
+    const chatIssueIdByAgent = buildChatIssueIdByAgentMap(chats.data);
+    for (const agent of listedAgents) {
+      const summary = resolveAgentActiveRunSummary(agent, liveRunsQuery.data, chatIssueIdByAgent);
+      if (summary) map.set(agent.id, summary);
+    }
+    return map;
+  }, [listedAgents, liveRunsQuery.data, chats.data]);
+  return <AgentConversationSidebar key={`${companyId}:${userId}`} agents={listedAgents} availableAgents={roster}
     compact={compact}
     existingChatAgentIds={existingChatAgentIds}
     activeId={active?.id} previews={previews}
+    activeRunsByAgent={activeRunsByAgent}
+    liveRunsLoaded={liveRunsQuery.isSuccess}
     unreadAgentIds={unreadAgentIds}
     unreadMessageCounts={unreadMessageCounts}
     pinnedAgentIds={pinnedAgentIds}

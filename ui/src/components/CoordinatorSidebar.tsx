@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { BookOpen, Inbox, Boxes, CircleCheck, Compass, FolderOpen, History, LayoutDashboard, MessageCircle, MoreHorizontal, Network, Pin, PinOff, Plus, Repeat, Search, Settings, SquarePen, Unplug, type LucideIcon } from "lucide-react";
+import { BookOpen, Inbox, Boxes, CircleCheck, Compass, FolderOpen, History, LayoutDashboard, ListOrdered, MessageCircle, MoreHorizontal, Network, Pin, PinOff, Plus, Repeat, Search, Settings, SquarePen, Unplug, type LucideIcon } from "lucide-react";
 import type { Agent, IssueSummary, Project } from "@paperclipai/shared";
 import { useCoordinatorAttentionCount } from "@/hooks/useCoordinatorAttentionCount";
 import { instanceSettingsApi } from "@/api/instanceSettings";
@@ -31,6 +31,8 @@ import { agentChatPinKey } from "./AgentChatPin";
 import { PinnedNavigationList, type PinnedNavigationItem } from "./PinnedNavigationList";
 import { companyProjectsQuery } from "@/lib/company-projects-query";
 import { SidebarProjectTasks } from "./SidebarProjectTasks";
+import { SidebarActiveRuns, useCompanyLiveRuns } from "./AgentActiveRunJump"; // fork 31erGER
+import { isWaitingToStart } from "@/lib/agent-queue-wait"; // fork 31erGER
 
 const NO_RECENT_TASKS: never[] = [];
 const TASK_PIN_ID_PATTERN = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
@@ -132,6 +134,8 @@ function RecentNavigationList({ children }: { children: ReactNode }) {
  * or task just because someone visits or switches agents. */
 export function CoordinatorSidebar({ children }: { children?: ReactNode }) {
   const { companyId, userId, agents, chats, session } = useAgentChatNavigation();
+  const { data: liveRuns } = useCompanyLiveRuns(companyId); // fork 31erGER
+  const queuedRunCount = (liveRuns ?? []).filter((run) => isWaitingToStart(run)).length; // fork 31erGER
   const unreadChatCount = chats.data?.filter(chat => chat.isUnreadForMe).length ?? 0;
   const pinnedNavigation = usePinnedNavigation(userId);
   const pinKeys = useMemo(() => new Set(pinnedNavigation.pins), [pinnedNavigation.pins]);
@@ -214,8 +218,11 @@ export function CoordinatorSidebar({ children }: { children?: ReactNode }) {
           </div>
           <SidebarNavItem className="design-sidebar-item" to="/decisions" label="Inbox" icon={Inbox} badge={attentionCount} badgeLabel="decisions" />
           <SidebarNavItem className="design-sidebar-item" to="/vault" label="Vault" icon={BookOpen} /> {/* fork 31erGER */}
+          <SidebarNavItem className="design-sidebar-item" to="/queue" label="Queue" icon={ListOrdered} badge={queuedRunCount} badgeLabel="queued runs" /> {/* fork 31erGER */}
           {orderedPins.length > 0 && <PinnedNavigationList key={`${companyId}:${userId}`} items={orderedPins} userId={userId} onReorder={pinnedNavigation.reorder} onUnpin={pinnedNavigation.toggle} />}
         </div>
+        {/* fork 31erGER: honest active-now list with 1-click jump to active task/chat */}
+        <SidebarActiveRuns liveRuns={liveRuns} agents={agents.data} chats={chats.data} />
         <Flyout open={moreOpen} onOpenChange={setMoreOpen}>
           <FlyoutTrigger asChild><button type="button" aria-label="More workspace pages" className="design-sidebar-item flex w-auto items-center gap-2.5 rounded-lg py-1.5 text-left transition-colors focus-visible:ring-2 focus-visible:ring-ring"><MoreHorizontal className="size-4 shrink-0" /><span>More</span></button></FlyoutTrigger>
           <FlyoutContent ref={moreContentRef} tabIndex={-1} onOpenAutoFocus={(event) => { event.preventDefault(); moreContentRef.current?.focus(); }} side={isMobile ? "bottom" : "right"} align="start" className="w-56 p-1" aria-label="More workspace pages">

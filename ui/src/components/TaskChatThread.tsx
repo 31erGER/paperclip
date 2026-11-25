@@ -1055,7 +1055,17 @@ export function TaskChatThread(props: TaskChatThreadProps) {
     truncatedRunIds,
     errorsByRun: logErrorsByRun,
     retry: retryLogs,
-  } = useLiveRunTranscripts({ runs: logRuns, companyId, ...(props.compactHistory ? { logReadLimitBytes: COMPACT_RUN_LOG_READ_LIMIT_BYTES } : {}) });
+  } = useLiveRunTranscripts({
+    runs: logRuns,
+    companyId,
+    // fork 31erGER: in single-agent chat, read up to 1 MiB (server max) instead of
+    // 32 KiB compact tail so full thinking blocks and tool calls are not truncated.
+    ...(conversationMode
+      ? { logReadLimitBytes: 1_048_576 }
+      : props.compactHistory
+        ? { logReadLimitBytes: COMPACT_RUN_LOG_READ_LIMIT_BYTES }
+        : {}),
+  });
   const fallbackByRunRef = useRef(
     new Map<string, NonNullable<ReturnType<typeof logTranscriptByRun.get>>>(),
   );

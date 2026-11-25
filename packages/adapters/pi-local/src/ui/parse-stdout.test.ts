@@ -125,7 +125,7 @@ describe("parsePiStdoutLine", () => {
     expect(entries.filter((e) => e.kind === "thinking")).toEqual([
       { kind: "thinking", ts: TS, text: "First I should ", delta: true },
       { kind: "thinking", ts: TS, text: "check the files.", delta: true },
-      { kind: "thinking", ts: TS, text: "", delta: true, lifecycle: "completed" },
+      { kind: "thinking", ts: TS, text: "First I should check the files.", lifecycle: "completed" },
     ]);
     expect(entries.filter((e) => e.kind === "assistant")).toEqual([
       { kind: "assistant", ts: TS, text: "Done!", delta: true },

@@ -415,15 +415,18 @@ export function SingleAgentThinkingBlock({
       </button>
 
       {!open && preview ? (
-        <div
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
           data-testid="single-agent-thinking-preview"
+          aria-label="Expand full thought process"
           className={cn(
-            "border-t border-border/50 bg-muted/15 px-3 py-1.5 text-xs leading-relaxed text-muted-foreground/90",
+            "block w-full cursor-pointer border-t border-border/50 bg-muted/15 px-3 py-1.5 text-left text-xs leading-relaxed text-muted-foreground/90 transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             active ? "line-clamp-3 whitespace-pre-wrap" : "line-clamp-2",
           )}
         >
           {preview}
-        </div>
+        </button>
       ) : null}
 
       {open ? (
@@ -432,11 +435,15 @@ export function SingleAgentThinkingBlock({
           ref={scrollRef}
           data-testid="single-agent-thinking-body"
           onScroll={(event) => {
+            if (!active) return;
             const el = event.currentTarget;
             const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
             stickToBottomRef.current = distanceFromBottom < 24;
           }}
-          className="max-h-96 overflow-y-auto border-t border-border/60 bg-background/50 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground"
+          className={cn(
+            "border-t border-border/60 bg-background/50 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground",
+            active && "max-h-96 overflow-y-auto",
+          )}
         >
           <TaskChatReasoningSummary text={body} streaming={active} />
         </div>

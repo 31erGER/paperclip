@@ -792,6 +792,16 @@ export function transcriptToTaskChatItems(
           entry.lifecycle === "completed" &&
           openThinking?.kind === "thinking" &&
           openThinking.lifecycleOnly === true;
+        // fork 31erGER: a completed full thinking frame (e.g. Pi `thinking_end`)
+        // replaces the open anonymous delta stream in place so reasoning is never
+        // duplicated and full text is recovered even when earlier deltas were truncated.
+        const completesAnonymousDeltaStream =
+          entry.itemId === undefined &&
+          thinkingItemId === undefined &&
+          !lifecycleOnly &&
+          entry.delta !== true &&
+          entry.lifecycle === "completed" &&
+          openThinking?.kind === "thinking";
         const sameThinkingItem =
           thinkingIndex >= 0 &&
           thinkingChannel === entry.channel &&
@@ -799,12 +809,17 @@ export function transcriptToTaskChatItems(
             (entry.itemId === undefined &&
               thinkingItemId === undefined &&
               entry.delta === true) ||
-            continuesAnonymousLifecycle);
+            continuesAnonymousLifecycle ||
+            completesAnonymousDeltaStream);
         if (sameThinkingItem) {
           const it = items[thinkingIndex];
           if (it.kind === "thinking") {
             if (entry.text) {
-              appendThinkingText(it.lines, entry.text, entry.delta);
+              if (completesAnonymousDeltaStream) {
+                it.lines = entry.text.split("\n");
+              } else {
+                appendThinkingText(it.lines, entry.text, entry.delta);
+              }
               it.lifecycleOnly = false;
             }
             it.transcriptIndex = i;

@@ -76,6 +76,14 @@ sequentially without flooding the local server.
   **Steer** on queued messages to redirect an active Pi run right after its
   current tool call, and CEO/manager comments on an active subordinate's task
   steer that worker mid-turn automatically.
+- **Honest live status, active-run jump & Queue tab (`/queue`)**: Chat contact
+  lists, the Agents page, and the global sidebar distinguish genuinely executing
+  runs (`Running in task` / `Running in chat`) from `Queued` runs waiting for a
+  slot. The sidebar **Queue** tab (`/queue`) renders a live visual diagram of
+  worker slots + the reserved express slot and the ordered cross-company waiting
+  queue with 1-click jump and stop/cancel actions. The sidebar **Active now**
+  card, the Chat contact list, and an in-chat banner also provide 1-click links
+  straight to where an agent is currently executing.
 
 ## Local models with Pi
 

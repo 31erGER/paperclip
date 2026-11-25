@@ -16,6 +16,8 @@ import {
   resolveEffectiveAgentStatus,
 } from "./AgentStatusIndicator";
 import { AgentConversationSidebar } from "./AgentConversationSidebar";
+import type { AgentActiveRunSummary } from "./AgentActiveRunJump";
+import type { LiveRunForIssue } from "@/api/heartbeats";
 
 const sampleAgents = [
   { id: "a-running", name: "Ada", title: "Engineer", role: "engineer", status: "running" },
@@ -51,6 +53,18 @@ describe("AgentStatusIndicator", () => {
     expect(resolveEffectiveAgentStatus("error", true)).toBe("error");
     expect(resolveEffectiveAgentStatus("terminated", true)).toBe("terminated");
     expect(agentStatusLabel("pending_approval")).toBe("Awaiting approval");
+    expect(agentStatusLabel("queued")).toBe("Queued");
+  });
+
+  it("uses live run state to distinguish running, queued, and stale idle agents", () => {
+    expect(resolveEffectiveAgentStatus("idle", "running")).toBe("running");
+    expect(resolveEffectiveAgentStatus("idle", "queued")).toBe("queued");
+    expect(resolveEffectiveAgentStatus("running", "queued")).toBe("queued");
+    expect(resolveEffectiveAgentStatus("running", "none")).toBe("idle");
+    expect(resolveEffectiveAgentStatus("active", "none")).toBe("idle");
+    expect(resolveEffectiveAgentStatus("paused", "running")).toBe("paused");
+    expect(resolveEffectiveAgentStatus("terminated", "running")).toBe("terminated");
+    expect(resolveEffectiveAgentStatus("error", "queued")).toBe("error");
   });
 
   it("renders token-backed dot colors and motion classes", async () => {
@@ -104,5 +118,82 @@ describe("AgentStatusIndicator", () => {
     expect(rows[4].textContent).toContain("Awaiting approval");
     expect(rows[5].querySelector('[data-slot="agent-status-dot"]')?.getAttribute("data-status")).toBe("terminated");
     expect(rows[5].textContent).toContain("Terminated");
+  });
+
+  it("shows honest task/chat/queued labels and 1-click task jump links when live runs are loaded", async () => {
+    const taskRun = {
+      id: "run-task-1",
+      status: "running",
+      agentId: "a-idle",
+      agentName: "Ben",
+      issueId: "issue-42",
+      startedAt: "2026-01-01T00:00:00Z",
+    } as LiveRunForIssue;
+    const queuedRun = {
+      id: "run-queued-1",
+      status: "queued",
+      agentId: "a-pending",
+      agentName: "Eve",
+      issueId: "issue-43",
+      startedAt: null,
+    } as LiveRunForIssue;
+
+    const activeRunsByAgent = new Map<string, AgentActiveRunSummary>([
+      [
+        "a-idle",
+        {
+          kind: "running",
+          location: "task",
+          run: taskRun,
+          href: "/issues/issue-42",
+          locationLabel: "Running in task",
+          actionLabel: "Jump to task",
+        },
+      ],
+      [
+        "a-pending",
+        {
+          kind: "queued",
+          location: "task",
+          run: queuedRun,
+          href: "/issues/issue-43",
+          locationLabel: "Queued in task",
+          actionLabel: "Open task",
+        },
+      ],
+    ]);
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <AgentConversationSidebar
+            agents={sampleAgents}
+            activeRunsByAgent={activeRunsByAgent}
+            liveRunsLoaded
+          />
+        </MemoryRouter>,
+      );
+    });
+
+    const rows = [...container.querySelectorAll<HTMLAnchorElement>("a.agent-contact-row")];
+    // Stale DB "running" agent with no live run -> shown honestly as Idle
+    expect(rows[0].querySelector('[data-slot="agent-status-dot"]')?.getAttribute("data-status")).toBe("idle");
+    expect(rows[0].textContent).toContain("Idle");
+    expect(container.querySelector('[data-testid="agent-sidebar-jump-a-running"]')).toBeNull();
+
+    // Agent running in a task -> shows "Running in task" + 1-click jump button
+    expect(rows[1].querySelector('[data-slot="agent-status-dot"]')?.getAttribute("data-status")).toBe("running");
+    expect(rows[1].textContent).toContain("Running in task");
+    const taskJump = container.querySelector<HTMLAnchorElement>('[data-testid="agent-sidebar-jump-a-idle"]');
+    expect(taskJump).not.toBeNull();
+    expect(taskJump?.getAttribute("href")).toBe("/issues/issue-42");
+    expect(taskJump?.textContent).toContain("Jump to task");
+
+    // Agent queued in a task -> shows "Queued in task" (queued dot, not running) + "Open task"
+    expect(rows[4].querySelector('[data-slot="agent-status-dot"]')?.getAttribute("data-status")).toBe("queued");
+    expect(rows[4].textContent).toContain("Queued in task");
+    const queuedJump = container.querySelector<HTMLAnchorElement>('[data-testid="agent-sidebar-jump-a-pending"]');
+    expect(queuedJump?.getAttribute("href")).toBe("/issues/issue-43");
+    expect(queuedJump?.textContent).toContain("Open task");
   });
 });

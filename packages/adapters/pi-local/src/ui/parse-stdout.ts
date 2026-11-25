@@ -375,10 +375,14 @@ export function parsePiStdoutLine(line: string, ts: string): TranscriptEntry[] {
         }
       }
 
-      // fork 31erGER: mark streamed thinking block complete without duplicating text.
+      // fork 31erGER: emit authoritative full thinking content on thinking_end with
+      // lifecycle="completed" so the UI replaces the delta stream in place without
+      // duplicating text AND still recovers full reasoning if earlier deltas fell
+      // outside the initial log tail window.
       if (msgType === "thinking_end") {
-        if (asString(assistantEvent.content)) {
-          return [{ kind: "thinking", ts, text: "", delta: true, lifecycle: "completed" }];
+        const content = asString(assistantEvent.content);
+        if (content) {
+          return [{ kind: "thinking", ts, text: content, lifecycle: "completed" }];
         }
       }
 

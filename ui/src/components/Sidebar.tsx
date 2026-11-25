@@ -27,6 +27,7 @@ import {
   Users,
   Compass,
   BookOpen, // fork 31erGER
+  ListOrdered, // fork 31erGER
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -54,6 +55,7 @@ import { PluginLauncherOutlet } from "@/plugins/launchers";
 import { SidebarCompanyMenu } from "./SidebarCompanyMenu";
 import { primarySidebarStyles } from "./primary-sidebar-styles";
 import { useShowCostMetrics } from "@/hooks/useDeploymentProfile";
+import { SidebarActiveRuns } from "./AgentActiveRunJump"; // fork 31erGER
 
 export function Sidebar({ children }: { children?: ReactNode }) {
   const { enabled } = useCoordinatorWorkspaceEnabled();
@@ -97,6 +99,7 @@ function ClassicSidebar({ children }: { children?: ReactNode }) {
   });
   usePublishSharedQueryData(sharedLiveRuns, liveRuns, liveRunsUpdatedAt);
   const liveRunCount = (liveRuns ?? []).filter((run) => !isWaitingToStart(run)).length;
+  const queuedRunCount = (liveRuns ?? []).filter((run) => isWaitingToStart(run)).length; // fork 31erGER
   const liveIssueIds = new Set(
     (liveRuns ?? []).flatMap((run) => run.issueId ? [run.issueId] : []),
   );
@@ -222,6 +225,12 @@ function ClassicSidebar({ children }: { children?: ReactNode }) {
           {conferenceRoomChatEnabled ? (
             <SidebarNavItem to="/board-chat" label="Conference Room" icon={MessagesSquare} />
           ) : null}
+          {/* fork 31erGER: honest active-now list with 1-click jump to active task/chat */}
+          <SidebarActiveRuns
+            liveRuns={liveRuns}
+            agents={chatNavigation.agents.data}
+            chats={chatNavigation.chats.data}
+          />
         </div>
 
         <SidebarSection label="Work" collapsible={{ open: workOpen, onOpenChange: setWorkOpen }}>
@@ -243,6 +252,7 @@ function ClassicSidebar({ children }: { children?: ReactNode }) {
           <SidebarNavItem to="/routines" label="Routines" icon={Repeat} />
           <SidebarNavItem to="/artifacts" label="Artifacts" icon={Package} />
           <SidebarNavItem to="/vault" label="Vault" icon={BookOpen} /> {/* fork 31erGER */}
+          <SidebarNavItem to="/queue" label="Queue" icon={ListOrdered} badge={queuedRunCount} badgeLabel="queued runs" /> {/* fork 31erGER */}
           {showCases ? (
             <SidebarNavItem to="/cases" label="Cases" icon={Layers} textBadge="beta" />
           ) : null}

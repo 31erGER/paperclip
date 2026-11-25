@@ -1,11 +1,12 @@
 import { useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { PanelLeftOpen, Plus, Search, Users, X } from "lucide-react";
+import { ArrowUpRight, PanelLeftOpen, Plus, Search, Users, X } from "lucide-react";
 import { SortablePinnedList, SortablePinnedRow } from "./PinnedNavigationList";
 import { Badge } from "./ui/badge";
 import type { Agent } from "@paperclipai/shared";
 import { AgentChatPicker } from "@/components/AgentChatPicker";
 import { AgentAvatar } from "@/components/AgentAvatar";
 import { AgentAvatarWithStatus, AgentStatusText, agentStatusLabel, resolveEffectiveAgentStatus } from "@/components/AgentStatusIndicator"; // fork 31erGER
+import { resolveLiveRunState, type AgentActiveRunSummary } from "@/components/AgentActiveRunJump"; // fork 31erGER
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Link, useNavigate } from "@/lib/router";
@@ -35,13 +36,16 @@ export interface AgentConversationSidebarProps {
   renderAgentAction?: (agent: Agent) => ReactNode;
   pinnedAgentIds?: readonly string[];
   onReorderPins?: (ids: string[]) => void;
+  /** fork 31erGER: honest per-agent live run summaries (running vs queued + chat vs task). */
+  activeRunsByAgent?: ReadonlyMap<string, AgentActiveRunSummary>;
+  liveRunsLoaded?: boolean;
 }
 
 const NO_PINNED_AGENTS: readonly string[] = [];
 const contactRowClassName = "agent-pin-row agent-contact-pin-row group/agent-pin relative rounded-md";
 
 /** Searchable navigation for one conversation per agent. */
-export function AgentConversationSidebar({ agents, compact = false, existingChatAgentIds, availableAgents = agents, activeId, previews = {}, unreadAgentIds = [], unreadMessageCounts, loading = false, error, onRetry, initialSearch = "", onSelect, onBrowse, onAddChat, historyLoading, historyError, onRetryHistory, onCreateAgent, renderAgentAction, pinnedAgentIds = NO_PINNED_AGENTS, onReorderPins }: AgentConversationSidebarProps) {
+export function AgentConversationSidebar({ agents, compact = false, existingChatAgentIds, availableAgents = agents, activeId, previews = {}, unreadAgentIds = [], unreadMessageCounts, loading = false, error, onRetry, initialSearch = "", onSelect, onBrowse, onAddChat, historyLoading, historyError, onRetryHistory, onCreateAgent, renderAgentAction, pinnedAgentIds = NO_PINNED_AGENTS, onReorderPins, activeRunsByAgent, liveRunsLoaded = false }: AgentConversationSidebarProps) {
   const navigate = useNavigate();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [search, setSearch] = useState(initialSearch);
@@ -105,24 +109,38 @@ export function AgentConversationSidebar({ agents, compact = false, existingChat
           const unreadCount = unreadMessageCounts?.get(agent.id) ?? 0;
           const hasUnread = unreadCount > 0 || unreadIds.has(agent.id);
           const canReorder = pinnedIds.has(agent.id) && !!onReorderPins;
-          const effectiveStatus = resolveEffectiveAgentStatus(agent.status, Boolean(previews[agent.id])); // fork 31erGER
+          const liveSummary = activeRunsByAgent?.get(agent.id) ?? null; // fork 31erGER
+          const effectiveStatus = liveRunsLoaded
+            ? resolveEffectiveAgentStatus(agent.status, resolveLiveRunState(liveSummary, true))
+            : resolveEffectiveAgentStatus(agent.status, Boolean(previews[agent.id])); // fork 31erGER
+          const statusTitleLabel = liveSummary?.locationLabel ?? agentStatusLabel(effectiveStatus); // fork 31erGER
           const subtitleRole = agent.status === "terminated" ? null : (agent.title ?? agent.role);
           const content = <><Link to={`/chats/${encodeURIComponent(agent.status === "terminated" ? agent.id : agentRouteRef(agent))}`}
           aria-current={activeId === agent.id ? "page" : undefined}
-          title={`${agent.name} (${agentStatusLabel(effectiveStatus)})${agent.title ? ` · ${agent.title}` : ""}`}
+          title={`${agent.name} (${statusTitleLabel})${agent.title ? ` · ${agent.title}` : ""}`}
           onClick={event => { if (onSelect) { event.preventDefault(); onSelect(agent); } }}
           className={cn("agent-contact-row flex min-w-0 items-center gap-3 rounded-md px-2.5 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring", renderAgentAction && hasUnread && "pr-12", canReorder && "pr-20", activeId === agent.id ? "bg-accent text-accent-foreground" : "group-hover/agent-pin:bg-accent/60 group-focus-within/agent-pin:bg-accent/60")}>
           <AgentAvatarWithStatus agent={agent} size={40} status={effectiveStatus} />
           <span className="agent-pin-text flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="truncate text-sm font-medium">{agent.name}</span>
             <span className="truncate text-xs text-muted-foreground">
-              <AgentStatusText status={effectiveStatus} />
+              <AgentStatusText status={effectiveStatus} label={liveSummary?.locationLabel} />
               {subtitleRole ? ` · ${subtitleRole}` : null}
             </span>
           </span>
           {unreadCount > 0 ? <Badge variant="ghost" aria-label={`${unreadCount} unread ${unreadCount === 1 ? "message" : "messages"} from ${agent.name}`} className="shrink-0 bg-primary font-mono tabular-nums text-primary-foreground">{unreadCount}</Badge>
             : unreadIds.has(agent.id) && <span role="img" aria-label={`Unread messages from ${agent.name}`} className="size-2 shrink-0 rounded-full bg-primary" />}
-        </Link>{renderAgentAction?.(agent)}</>;
+        </Link>{renderAgentAction?.(agent)}{liveSummary && liveSummary.location !== "chat" ? <div className="flex items-center justify-end px-2.5 pb-2 pt-0.5">
+          <Link
+            to={liveSummary.href}
+            data-testid={`agent-sidebar-jump-${agent.id}`}
+            onClick={event => event.stopPropagation()}
+            className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-0.5 text-(length:--text-micro) font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <span>{liveSummary.actionLabel}</span>
+            <ArrowUpRight className="size-3" aria-hidden="true" />
+          </Link>
+        </div> : null}</>;
           return <SortablePinnedRow key={agent.id} id={agent.id} label={agent.name} disabled={!canReorder} className={contactRowClassName}
             data-selected={activeId === agent.id || undefined} data-has-unread={hasUnread || undefined}
             handleClassName="agent-chat-pin right-2 size-8 focus-visible:outline-none group-hover/agent-pin:opacity-100 group-focus-within/agent-pin:opacity-100" handleIconClassName="size-4">{content}</SortablePinnedRow>;

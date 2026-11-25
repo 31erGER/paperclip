@@ -14,6 +14,7 @@ import { TaskDetailSurface } from "./IssueDetail";
 import { isUuidLike, type Issue } from "@paperclipai/shared";
 import { afterVisibleConversationPaint } from "@/lib/onboarding-chat";
 import { Button } from "@/components/ui/button";
+import { AgentRunningElsewhereBanner } from "@/components/AgentActiveRunJump"; // fork 31erGER
 
 export function AgentChat() {
   const { agentRef = "" } = useParams<{ agentRef: string }>();
@@ -142,6 +143,12 @@ export function AgentChat() {
         <span>{greetingError}</span>
         <Button variant="outline" size="sm" onClick={() => setGreetingAttempt(attempt => attempt + 1)}>Retry welcome</Button>
       </div>}
+      {/* fork 31erGER: show where this agent is actually running + 1-click jump */}
+      <AgentRunningElsewhereBanner
+        companyId={selectedCompanyId}
+        agent={agent}
+        currentChatIssueId={chat.data?.id ?? null}
+      />
       <TaskDetailSurface
         key={`${agent.id}:${userId}`}
         conversation={{ agent, issue: chat.data ?? null, ensureIssue, onReady }}

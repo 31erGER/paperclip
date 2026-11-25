@@ -116,7 +116,22 @@ function createCompactCompactor(now: Clock): PiStdoutCompactor {
     // could split a secret across the cut boundary. See #5699.
     if (event.type !== "message_update") return line;
 
-    const { message: _cumulativeMessage, ...rest } = event;
+    // fork 31erGER: drop no-op streaming framing events and per-token usage blobs
+    // from message_update so long thinking runs stay compact in the run log.
+    const updateType = isRecord(event.assistantMessageEvent) && typeof event.assistantMessageEvent.type === "string"
+      ? event.assistantMessageEvent.type
+      : "";
+    if (
+      updateType === "thinking_start" ||
+      updateType === "text_start" ||
+      updateType === "toolcall_start" ||
+      updateType === "toolcall_delta" ||
+      updateType === "toolcall_end"
+    ) {
+      return null;
+    }
+
+    const { message: _cumulativeMessage, usage: _perTokenUsage, ...rest } = event;
     return JSON.stringify({
       ...rest,
       ...(event.assistantMessageEvent !== undefined

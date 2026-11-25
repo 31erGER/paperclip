@@ -2,6 +2,7 @@ import { usePrimaryAgentPresentation } from "@/components/primary-agent/PrimaryA
 import { useEffect, useState } from "react";
 import { MessageCircle } from "lucide-react";
 import { AgentAvatarWithStatus, AgentStatusText, resolveEffectiveAgentStatus } from "@/components/AgentStatusIndicator"; // fork 31erGER
+import { buildChatIssueIdByAgentMap, resolveAgentActiveRunSummary, resolveLiveRunState, useCompanyLiveRuns } from "@/components/AgentActiveRunJump"; // fork 31erGER
 import { QueryErrorState, useQueryView } from "@/components/QueryView";
 import { Button } from "@/components/ui/button";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
@@ -20,6 +21,8 @@ export function AgentChats() {
 
 function AgentChatsContent({ companyId, userId, enabled, loaded, agents, chats, session }: Pick<ReturnType<typeof useAgentChatNavigation>, "companyId" | "userId" | "enabled" | "loaded" | "agents" | "chats" | "session">) {
   const primary = usePrimaryAgentPresentation(companyId);
+  const liveRunsQuery = useCompanyLiveRuns(companyId); // fork 31erGER
+  const chatIssueIdByAgent = buildChatIssueIdByAgentMap(chats.data); // fork 31erGER
   const openChat = useOpenAgentChat(companyId, userId);
   const navigate = useNavigate();
   const recentIds = useRecentAgentChats(companyId ?? "", userId);
@@ -72,14 +75,18 @@ function AgentChatsContent({ companyId, userId, enabled, loaded, agents, chats, 
     {error ? <QueryErrorState error={error} action="load your chats" onRetry={() => { agentsView.retry(); chatsView.retry(); sessionView.retry(); }} />
       : agents.isPending || session.isPending ? <p role="status" className="text-sm text-muted-foreground">Loading agents…</p>
       : <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        {(agents.data ?? []).slice(0, 6).map(agent => <button key={agent.id} type="button" disabled={openingId !== null}
+        {(agents.data ?? []).slice(0, 6).map(agent => {
+          const liveSummary = resolveAgentActiveRunSummary(agent, liveRunsQuery.data, chatIssueIdByAgent); // fork 31erGER
+          const effectiveStatus = resolveEffectiveAgentStatus(agent.status, resolveLiveRunState(liveSummary, liveRunsQuery.isSuccess)); // fork 31erGER
+          return <button key={agent.id} type="button" disabled={openingId !== null}
           onClick={async () => {
             setOpeningId(agent.id); setOpenError(null);
             try { await openChat(agent); } catch (error) { setOpenError(error instanceof Error ? error.message : "Couldn’t open chat. Try again."); } finally { setOpeningId(null); }
           }} className="flex items-center gap-3 rounded-lg border border-border p-4 text-left hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50">
-          <AgentAvatarWithStatus agent={agent} size={32} status={resolveEffectiveAgentStatus(agent.status)} />
-          <span className="flex min-w-0 flex-col gap-1"><span className="truncate text-sm font-medium">{agent.name}</span><span className="truncate text-xs text-muted-foreground">{openingId === agent.id ? "Opening chat…" : <><AgentStatusText status={resolveEffectiveAgentStatus(agent.status)} />{` · ${agent.title ?? agent.role}`}</>}</span></span>
-        </button>)}
+          <AgentAvatarWithStatus agent={agent} size={32} status={effectiveStatus} />
+          <span className="flex min-w-0 flex-col gap-1"><span className="truncate text-sm font-medium">{agent.name}</span><span className="truncate text-xs text-muted-foreground">{openingId === agent.id ? "Opening chat…" : <><AgentStatusText status={effectiveStatus} label={liveSummary?.locationLabel} />{` · ${agent.title ?? agent.role}`}</>}</span></span>
+        </button>;
+        })}
       </div>}
     {openError && <p role="alert" className="text-sm text-destructive">{openError}</p>}
     {agents.data?.length === 0 && <p className="text-sm text-muted-foreground">Add an agent to start a conversation.</p>}

@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 
 const STATUS_LABELS: Record<string, string> = {
   running: "Running",
+  queued: "Queued",
   idle: "Idle",
   active: "Idle",
   paused: "Paused",
@@ -20,15 +21,28 @@ const STATUS_LABELS: Record<string, string> = {
 
 const STATUS_TEXT_CLASS: Record<string, string> = {
   running: "text-(--status-agent-running) font-medium",
+  queued: "text-(--status-agent-paused)",
   paused: "text-(--status-agent-paused)",
   pending_approval: "text-(--status-agent-paused)",
   error: "text-(--status-agent-error) font-medium",
 };
 
+export type AgentLiveRunState = "running" | "queued" | "none";
+
 export function resolveEffectiveAgentStatus(
   status: string,
-  hasActiveConversation?: boolean,
+  liveStateOrActive?: boolean | AgentLiveRunState,
 ): string {
+  if (typeof liveStateOrActive === "string") {
+    if (status === "terminated" || status === "paused") return status;
+    if (liveStateOrActive === "running") return "running";
+    if (status === "error") return "error";
+    if (liveStateOrActive === "queued") return "queued";
+    // When live-runs data is loaded and reports no active/queued run for this
+    // agent, treat a stale "running" or "active" DB flag as "idle".
+    return status === "running" || status === "active" ? "idle" : status;
+  }
+  const hasActiveConversation = Boolean(liveStateOrActive);
   if (status === "active") return hasActiveConversation ? "running" : "idle";
   if (
     hasActiveConversation &&
@@ -46,7 +60,7 @@ export function agentStatusLabel(status: string): string {
 }
 
 function agentStatusCssVar(status: string): string {
-  if (status === "pending_approval") return "--status-agent-paused";
+  if (status === "pending_approval" || status === "queued") return "--status-agent-paused";
   return agentStatusVar[status] ?? agentStatusVarDefault;
 }
 
@@ -84,19 +98,21 @@ export function AgentStatusDot({
 
 export function AgentStatusText({
   status,
+  label,
   className,
 }: {
   status: string;
+  label?: string;
   className?: string;
 }) {
-  const label = agentStatusLabel(status);
+  const resolvedLabel = label ?? agentStatusLabel(status);
   return (
     <span
       data-slot="agent-status-text"
       data-status={status}
       className={cn(STATUS_TEXT_CLASS[status] ?? "text-muted-foreground", className)}
     >
-      {label}
+      {resolvedLabel}
     </span>
   );
 }

@@ -18,6 +18,7 @@ const BOARD_ROUTE_ROOTS = new Set([
   "goals",
   "artifacts",
   "vault", // fork 31erGER
+  "queue", // fork 31erGER
   "tools",
   "approvals",
   "costs",

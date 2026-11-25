@@ -16,6 +16,7 @@ import {
   GitBranch,
   Package,
   BookOpen, // fork 31erGER
+  ListOrdered, // fork 31erGER
   Settings,
   FolderOpen,
   Unplug,
@@ -44,6 +45,7 @@ import { PluginSlotOutlet } from "@/plugins/slots";
 import { PluginLauncherOutlet } from "@/plugins/launchers";
 import { SidebarCompanyMenu } from "./SidebarCompanyMenu.production";
 import { useShowCostMetrics } from "@/hooks/useDeploymentProfile";
+import { SidebarActiveRuns } from "./AgentActiveRunJump"; // fork 31erGER
 
 export function Sidebar() {
   const showCostMetrics = useShowCostMetrics();
@@ -78,6 +80,7 @@ export function Sidebar() {
   });
   usePublishSharedQueryData(sharedLiveRuns, liveRuns, liveRunsUpdatedAt);
   const liveRunCount = (liveRuns ?? []).filter((run) => !isWaitingToStart(run)).length;
+  const queuedRunCount = (liveRuns ?? []).filter((run) => isWaitingToStart(run)).length; // fork 31erGER
   const showWorkspacesLink = experimentalSettings?.enableIsolatedWorkspaces === true;
   const showApps = experimentalSettings?.enableApps === true;
   const showStatusCards = experimentalSettings?.enableStatusCards === true;
@@ -170,6 +173,8 @@ export function Sidebar() {
           {conferenceRoomChatEnabled ? (
             <SidebarNavItem to="/board-chat" label="Conference Room" icon={MessagesSquare} />
           ) : null}
+          {/* fork 31erGER: honest active-now list with 1-click jump to active task/chat */}
+          <SidebarActiveRuns liveRuns={liveRuns} />
         </div>
 
         <SidebarSection label="Work" collapsible={{ open: workOpen, onOpenChange: setWorkOpen }}>
@@ -189,6 +194,7 @@ export function Sidebar() {
           ) : null}
           <SidebarNavItem to="/artifacts" label="Artifacts" icon={Package} />
           <SidebarNavItem to="/vault" label="Vault" icon={BookOpen} /> {/* fork 31erGER */}
+          <SidebarNavItem to="/queue" label="Queue" icon={ListOrdered} badge={queuedRunCount} badgeLabel="queued runs" /> {/* fork 31erGER */}
           <SidebarNavItem to="/skills" label="Skills" icon={Boxes} />
           {showWorkspacesLink ? (
             <SidebarNavItem to="/workspaces" label="Workspaces" icon={GitBranch} />

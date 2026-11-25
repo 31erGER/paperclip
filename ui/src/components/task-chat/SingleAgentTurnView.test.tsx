@@ -16,6 +16,7 @@ import {
 } from "./SingleAgentTurnView";
 import { TaskChatRunnerActivityGroup } from "./TaskChatRunnerActivityGroup";
 import { TaskChatThinking } from "./TaskChatThinking";
+import { transcriptToTaskChatItems } from "./transcript-adapter";
 import type {
   TaskChatActivityPhaseItem,
   TaskChatItem,
@@ -206,6 +207,42 @@ describe("SingleAgentThinkingBlock", () => {
     const expandedBody = container.querySelector('[data-testid="single-agent-thinking-body"]');
     expect(expandedBody?.textContent).toContain("Step 1: inspect the vault files.");
     expect(expandedBody?.textContent).toContain("Step 4: draft a concise answer.");
+  });
+
+  it("recovers full thinking from thinking_end without duplicating streamed deltas and unfolds on preview click", () => {
+    // Simulate a log tail window that only caught the last delta before thinking_end arrived.
+    const entries: TranscriptEntry[] = [
+      { kind: "thinking", ts: "2026-11-25T11:15:05.000Z", text: "tail fragment only.", delta: true },
+      {
+        kind: "thinking",
+        ts: "2026-11-25T11:15:06.000Z",
+        text: "Full beginning of thought process.\nMiddle reasoning step.\ntail fragment only.",
+        lifecycle: "completed",
+      },
+    ];
+    const items = transcriptToTaskChatItems(entries, {
+      runId: "run-recover",
+      agentName: "CEO",
+      running: false,
+    });
+    const thinkingItems = items.filter((item) => item.kind === "thinking");
+    expect(thinkingItems).toHaveLength(1);
+    const fullText = thinkingItems[0]!.lines.join("\n");
+    expect(fullText).toBe(
+      "Full beginning of thought process.\nMiddle reasoning step.\ntail fragment only.",
+    );
+
+    renderWithTheme(<SingleAgentThinkingBlock item={thinkingItems[0]!} active={false} />);
+    const previewBtn = container.querySelector<HTMLButtonElement>(
+      '[data-testid="single-agent-thinking-preview"]',
+    );
+    expect(previewBtn).not.toBeNull();
+    act(() => {
+      previewBtn!.click();
+    });
+    const expanded = container.querySelector('[data-testid="single-agent-thinking-body"]');
+    expect(expanded?.textContent).toContain("Full beginning of thought process.");
+    expect(expanded?.textContent).toContain("tail fragment only.");
   });
 });
 
