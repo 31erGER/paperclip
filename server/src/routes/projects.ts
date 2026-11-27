@@ -429,9 +429,11 @@ export function projectRoutes(db: Db) {
     }
     const configurationWarnings = projectData.env !== undefined
       ? protectedEnvironmentKeyWarnings(await listProtectedEnvironmentKeyHolders(db), projectData.env, "env") : [];
-    if (workspace && (repositoryIds || repositoryUrls)) throw unprocessable("Use either workspace or repositoryIds/repositoryUrls when creating a project");
+    // fork 31erGER: ignore empty repositoryIds/repositoryUrls arrays when creating with a local workspace
+    const hasRepositorySelection = Boolean(repositoryIds?.length || repositoryUrls?.length);
+    if (workspace && hasRepositorySelection) throw unprocessable("Use either workspace or repositoryIds/repositoryUrls when creating a project");
     const urlRepositories = (repositoryUrls ?? []).map(normalizeProjectRepositoryUrl);
-    const repositories = repositoryIds ? await selectedRepositories(req, companyId, repositoryIds) : null;
+    const repositories = repositoryIds?.length ? await selectedRepositories(req, companyId, repositoryIds) : null;
     const actor = getActorInfo(req);
     const fingerprint = createHash("sha256").update(JSON.stringify({ projectData, workspace, repositoryIds, repositoryUrls, environmentId, expectedStorageProviderPluginId })).digest("hex");
     const receiptKey = idempotencyKey ? `project:${companyId}:${actor.actorId}:${runContext?.issue.id ?? "board"}:${idempotencyKey}` : null;

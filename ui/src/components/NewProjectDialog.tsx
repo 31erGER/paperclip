@@ -48,9 +48,13 @@ export function NewProjectForm({ companyId, onClose, onCreated }: { companyId: s
   const environmentReady = Boolean(environmentView.kind !== "error" && options && (!options.error || selectedGroup) && (!options.groups.length || selectedGroup));
 
   const create = useMutation({
-    mutationFn: () => projectsApi.create(companyId, { name: name.trim(), color, status: "planned", repositoryIds: repos.map((repo) => repo.id), ...(selectedGroup ? { environmentId, expectedStorageProviderPluginId: selectedGroup.storageProviderPluginId } : {}),
-      // Fork 31erGER: a project is a folder on the host.
-      ...(folderPath ? { workspace: { name: "Project folder", sourceType: "local_path", cwd: folderPath, isPrimary: true } } : {}),
+    mutationFn: () => projectsApi.create(companyId, { name: name.trim(), color, status: "planned", ...(selectedGroup ? { environmentId, expectedStorageProviderPluginId: selectedGroup.storageProviderPluginId } : {}),
+      // Fork 31erGER: a project is a folder on the host; omit repositoryIds when using a local workspace folder.
+      ...(folderPath
+        ? { workspace: { name: "Project folder", sourceType: "local_path", cwd: folderPath, isPrimary: true } }
+        : repos.length > 0
+          ? { repositoryIds: repos.map((repo) => repo.id) }
+          : {}),
     }),
     onSuccess: async (project) => {
       trackRecentProject(project.id, companyId);
@@ -104,7 +108,7 @@ export function NewProjectForm({ companyId, onClose, onCreated }: { companyId: s
           {environmentView.kind === "error" && <QueryErrorState error={environmentView.error} size="inline" action="load project environments"
             className="mb-3" onRetry={environmentView.retry} retrying={environmentView.isFetching} />}
           {options?.error && !selectedGroup && <p role="alert" className="mb-3 text-sm text-destructive">{options.error}</p>}
-          <ProjectRepositoryInput companyId={companyId} selected={repos} onChange={setRepos} onConnect={() => setConnecting(true)} disabled={create.isPending} />
+          {!isLocal && !folderPath && <ProjectRepositoryInput companyId={companyId} selected={repos} onChange={setRepos} onConnect={() => setConnecting(true)} disabled={create.isPending} />}
         </div>
         {create.status === "error" && <p role="alert" className="px-5 pt-3 text-sm text-destructive">{describeError(create.error).body}</p>}
         <div className="flex shrink-0 justify-between gap-2 px-5 py-5">
